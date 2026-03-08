@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Environment
+.env
+
+# Data files (contain personal info)
+jobs_database.json
+job_applications.xlsx
+logs/
+chrome_profile/
+
+# Node
+node_modules/
+dashboard/frontend/.next/
+dashboard/frontend/out/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
