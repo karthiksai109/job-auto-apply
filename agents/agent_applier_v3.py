@@ -163,6 +163,9 @@ class PlaywrightJobApplierAgent:
     # ------------------------------------------------------------------
     # Greenhouse
     # ------------------------------------------------------------------
+    # Companies whose boards.greenhouse.io URLs redirect to job-boards.greenhouse.io (form works)
+    GREENHOUSE_DIRECT_WORKS = {"twilio", "figma", "reddit", "cloudflare", "grafana", "sentry", "zapier", "wiz", "gusto", "elastic", "affirm", "duolingo"}
+
     def _apply_greenhouse(self, job: dict) -> bool:
         """Fill out a Greenhouse application form via Playwright."""
         url = job.get("url", "")
@@ -170,67 +173,97 @@ class PlaywrightJobApplierAgent:
             logger.warning(f"  No URL for {job.get('title')}")
             return False
 
-        # Build the direct boards.greenhouse.io URL which always has the standard form
         ats_token = job.get("ats_token", "")
         ats_job_id = job.get("ats_job_id", "")
 
-        if ats_token and ats_job_id:
-            apply_url = f"https://boards.greenhouse.io/{ats_token}/jobs/{ats_job_id}"
-        elif "boards.greenhouse.io" in url or "job-boards.greenhouse.io" in url:
-            apply_url = url
-        else:
-            # Try to extract gh_jid from URL query params
-            import re as _re
-            gh_match = _re.search(r'gh_jid=(\d+)', url)
-            if gh_match and ats_token:
-                apply_url = f"https://boards.greenhouse.io/{ats_token}/jobs/{gh_match.group(1)}"
-            else:
-                apply_url = url if "#app" in url else url + "#app"
+        # Strategy: try boards.greenhouse.io first (works for some companies),
+        # then fall back to the Greenhouse embed iframe URL
+        urls_to_try = []
 
-        logger.info(f"  Greenhouse URL: {apply_url}")
+        if ats_token and ats_job_id:
+            urls_to_try.append(f"https://boards.greenhouse.io/{ats_token}/jobs/{ats_job_id}")
+        if "job-boards.greenhouse.io" in url or "boards.greenhouse.io" in url:
+            urls_to_try.append(url)
+        if url and url not in urls_to_try:
+            # Original URL as fallback (company career page)
+            urls_to_try.append(url if "#app" in url else url + "#app")
+
+        if not urls_to_try:
+            logger.warning(f"  No valid URL for {job.get('title')}")
+            return False
 
         page = self.browser.new_page()
         try:
-            page.goto(apply_url, wait_until="domcontentloaded", timeout=25000)
-            page.wait_for_timeout(3000)  # let JS render
-
-            # STEP 1: Find or navigate to the application form
-            # boards.greenhouse.io shows job description first — need to click Apply
-            form_found = self._find_greenhouse_form(page)
-
-            if not form_found:
-                # Try clicking "Apply for this job" button which navigates to form
-                apply_btns = [
-                    "a:has-text('Apply for this job')", "a:has-text('Apply Now')",
-                    "a:has-text('Apply now')", "a:has-text('Apply')",
-                    "button:has-text('Apply for this job')", "button:has-text('Apply Now')",
-                    "button:has-text('Apply')", "a.postings-btn",
-                    ".application-page__apply-button", "#apply_button",
-                    "a[href*='#app']", "a[data-job-id]",
-                ]
-                for btn_sel in apply_btns:
-                    try:
-                        btn = page.locator(btn_sel).first
-                        if btn.is_visible(timeout=2000):
-                            btn.click()
-                            page.wait_for_timeout(4000)
-                            form_found = self._find_greenhouse_form(page)
-                            if form_found:
-                                logger.info(f"  Form found after clicking Apply button")
-                                break
-                    except Exception:
-                        continue
-
-            if not form_found:
-                # Last resort: try navigating directly to #app URL
-                if "#app" not in page.url:
-                    page.goto(apply_url + "#app", wait_until="domcontentloaded", timeout=15000)
+            form_found = False
+            for try_url in urls_to_try:
+                logger.info(f"  Trying: {try_url}")
+                try:
+                    page.goto(try_url, wait_until="domcontentloaded", timeout=20000)
                     page.wait_for_timeout(3000)
-                    form_found = self._find_greenhouse_form(page)
+                except PlaywrightTimeout:
+                    logger.warning(f"  Timeout loading {try_url}")
+                    continue
+
+                final_url = page.url
+
+                # Check if we landed on a Cloudflare challenge or error page
+                title = page.title().lower()
+                if "attention required" in title or "just a moment" in title:
+                    logger.warning(f"  Cloudflare blocked: {try_url}")
+                    continue
+
+                # Check for error page (invalid job ID)
+                if "error=true" in final_url or page.locator("input").count() < 2:
+                    # Check if there's an iframe with the Greenhouse embed
+                    iframes = page.locator("iframe[src*='greenhouse']")
+                    if iframes.count() > 0:
+                        iframe_src = iframes.first.get_attribute("src")
+                        if iframe_src:
+                            logger.info(f"  Found Greenhouse iframe: {iframe_src}")
+                            page.goto(iframe_src, wait_until="domcontentloaded", timeout=15000)
+                            page.wait_for_timeout(3000)
+
+                # STEP 1: Look for form
+                form_found = self._find_greenhouse_form(page)
+
+                if not form_found:
+                    # Try clicking "Apply" button
+                    apply_btns = [
+                        "a:has-text('Apply for this job')", "a:has-text('Apply Now')",
+                        "a:has-text('Apply now')", "a:has-text('Apply')",
+                        "button:has-text('Apply for this job')", "button:has-text('Apply Now')",
+                        "button:has-text('Apply')", "#apply_button",
+                        "a[href*='#app']",
+                    ]
+                    for btn_sel in apply_btns:
+                        try:
+                            btn = page.locator(btn_sel).first
+                            if btn.is_visible(timeout=1500):
+                                btn.click()
+                                page.wait_for_timeout(4000)
+                                form_found = self._find_greenhouse_form(page)
+                                if form_found:
+                                    logger.info(f"  Form found after clicking Apply button")
+                                    break
+                        except Exception:
+                            continue
+
+                if not form_found and "#app" not in page.url:
+                    try:
+                        page.goto(page.url + "#app", wait_until="domcontentloaded", timeout=10000)
+                        page.wait_for_timeout(2000)
+                        form_found = self._find_greenhouse_form(page)
+                    except Exception:
+                        pass
+
+                if form_found:
+                    break
 
             if not form_found:
-                logger.warning(f"  No form found on {apply_url} (final URL: {page.url})")
+                logger.warning(f"  No form found for {job.get('title')} @ {job.get('company')} (tried {len(urls_to_try)} URLs)")
                 return False
+
+            logger.info(f"  Form found! Filling fields for {job.get('title')}")
 
             # STEP 2: Fill standard Greenhouse fields
             filled_any = False
@@ -248,13 +281,18 @@ class PlaywrightJobApplierAgent:
                         break
 
             # Fill LinkedIn/GitHub/portfolio if fields exist
-            self._fill_field(page, "input[name*='linkedin'], input[placeholder*='LinkedIn']", PERSONAL_INFO["linkedin_url"])
-            self._fill_field(page, "input[name*='github'], input[placeholder*='GitHub']", PERSONAL_INFO["github_url"])
-            self._fill_field(page, "input[name*='website'], input[name*='portfolio'], input[placeholder*='Website']", PERSONAL_INFO["portfolio_url"])
+            for sel in ["input[name*='linkedin']", "input[placeholder*='LinkedIn']", "input[id*='linkedin']"]:
+                if self._fill_field(page, sel, PERSONAL_INFO["linkedin_url"]): break
+            for sel in ["input[name*='github']", "input[placeholder*='GitHub']", "input[id*='github']"]:
+                if self._fill_field(page, sel, PERSONAL_INFO["github_url"]): break
+            for sel in ["input[name*='website']", "input[name*='portfolio']", "input[placeholder*='Website']", "input[placeholder*='Portfolio']"]:
+                if self._fill_field(page, sel, PERSONAL_INFO["portfolio_url"]): break
 
             if not filled_any:
                 logger.warning(f"  Could not fill any fields for {job.get('title')} @ {job.get('company')}")
                 return False
+
+            logger.info(f"  Fields filled for {job.get('title')}")
 
             # STEP 3: Upload resume
             resume_uploaded = self._upload_resume(page)
@@ -267,21 +305,25 @@ class PlaywrightJobApplierAgent:
             # STEP 5: Submit
             submitted = self._click_submit(page)
             if submitted:
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(4000)
+                # Check for success indicators
+                body_text = page.locator("body").text_content()[:1000].lower()
                 if self._check_success(page):
+                    logger.info(f"  SUCCESS confirmed for {job.get('title')}")
                     return True
-                # Still count as applied if we got past submit without error page
-                body_text = page.locator("body").text_content()[:500].lower()
-                if "error" not in body_text and "required" not in body_text:
-                    return True
-                logger.warning(f"  Form may have validation errors for {job.get('title')}")
-                return False
+                # Check for validation errors
+                if "error" in body_text or "required" in body_text or "please" in body_text:
+                    logger.warning(f"  Form validation errors for {job.get('title')}")
+                    return False
+                # No clear error — likely submitted
+                logger.info(f"  Submit clicked, no errors detected for {job.get('title')}")
+                return True
 
             logger.warning(f"  No submit button found for {job.get('title')} @ {job.get('company')}")
             return False
 
         except PlaywrightTimeout:
-            logger.warning(f"  Timeout loading {apply_url}")
+            logger.warning(f"  Timeout for {job.get('title')}")
             return False
         except Exception as e:
             logger.warning(f"  Greenhouse error for {job.get('title')}: {e}")
