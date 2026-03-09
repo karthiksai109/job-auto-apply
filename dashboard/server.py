@@ -252,6 +252,9 @@ def _run_apply_batch(batch_size: int = 30):
 
         _log("applier", f"Batch complete: {applied_count} applied, {failed_count} failed")
 
+        # Sync to Excel immediately
+        _run_excel_sync()
+
         # Send email notification
         _log("notifier", "Sending completion email...")
         agent_states["notifier"]["status"] = "running"
@@ -266,6 +269,23 @@ def _run_apply_batch(batch_size: int = 30):
         _apply_lock.release()
 
 
+def _run_excel_sync():
+    """Sync job database to Excel spreadsheet."""
+    try:
+        agent_states["tracker"]["status"] = "running"
+        _log("tracker", "Syncing to Excel...")
+        from agents.agent_excel_tracker import ExcelTrackerAgent
+        tracker = ExcelTrackerAgent()
+        result = tracker.run()
+        agent_states["tracker"]["stats"] = result
+        agent_states["tracker"]["last_run"] = datetime.now().isoformat()
+        _log("tracker", f"Excel synced: {result.get('total_jobs', 0)} jobs written to {result.get('file', '')}")
+    except Exception as e:
+        _log("tracker", f"Excel sync error: {e}", "error")
+    finally:
+        agent_states["tracker"]["status"] = "idle"
+
+
 def _run_scraper():
     """Run the scraper agent."""
     agent_states["scraper"]["status"] = "running"
@@ -276,6 +296,8 @@ def _run_scraper():
         result = agent.run()
         agent_states["scraper"]["stats"] = result
         _log("scraper", f"Scraper done: {result.get('new_jobs', 0)} new jobs")
+        # Auto-sync to Excel after scraping
+        _run_excel_sync()
     except Exception as e:
         _log("scraper", f"Scraper error: {e}", "error")
     finally:
@@ -411,6 +433,14 @@ def api_scrape(background_tasks: BackgroundTasks):
     if agent_states["scraper"]["status"] == "running":
         return {"error": "Scraper is already running", "status": "running"}
     background_tasks.add_task(_run_scraper)
+    return {"status": "started"}
+
+
+@app.post("/api/excel-sync")
+def api_excel_sync(background_tasks: BackgroundTasks):
+    if agent_states["tracker"]["status"] == "running":
+        return {"error": "Tracker is already running", "status": "running"}
+    background_tasks.add_task(_run_excel_sync)
     return {"status": "started"}
 
 
