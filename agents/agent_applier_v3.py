@@ -194,82 +194,88 @@ class PlaywrightJobApplierAgent:
             page.goto(apply_url, wait_until="domcontentloaded", timeout=25000)
             page.wait_for_timeout(3000)  # let JS render
 
-            # Look for the application form — try multiple selectors
-            form_found = False
-            form_selectors = [
-                "form#application-form", "form[data-ui='application-form']",
-                "form.application--form", "form#application_form",
-                "div#application", "div[data-controller='application']",
-                "div.application-form", "section#app_body", "form",
-            ]
-            for sel in form_selectors:
-                try:
-                    if page.locator(sel).first.is_visible(timeout=2000):
-                        form_found = True
-                        break
-                except Exception:
-                    continue
+            # STEP 1: Find or navigate to the application form
+            # boards.greenhouse.io shows job description first — need to click Apply
+            form_found = self._find_greenhouse_form(page)
 
             if not form_found:
-                # Some pages need you to click "Apply" button first
+                # Try clicking "Apply for this job" button which navigates to form
                 apply_btns = [
                     "a:has-text('Apply for this job')", "a:has-text('Apply Now')",
-                    "a:has-text('Apply')", "button:has-text('Apply')",
-                    "a.postings-btn", ".application-page__apply-button",
+                    "a:has-text('Apply now')", "a:has-text('Apply')",
+                    "button:has-text('Apply for this job')", "button:has-text('Apply Now')",
+                    "button:has-text('Apply')", "a.postings-btn",
+                    ".application-page__apply-button", "#apply_button",
+                    "a[href*='#app']", "a[data-job-id]",
                 ]
                 for btn_sel in apply_btns:
                     try:
                         btn = page.locator(btn_sel).first
-                        if btn.is_visible(timeout=1500):
+                        if btn.is_visible(timeout=2000):
                             btn.click()
-                            page.wait_for_timeout(3000)
-                            form_found = True
-                            break
+                            page.wait_for_timeout(4000)
+                            form_found = self._find_greenhouse_form(page)
+                            if form_found:
+                                logger.info(f"  Form found after clicking Apply button")
+                                break
                     except Exception:
                         continue
 
             if not form_found:
-                logger.warning(f"  No form found on {apply_url}")
+                # Last resort: try navigating directly to #app URL
+                if "#app" not in page.url:
+                    page.goto(apply_url + "#app", wait_until="domcontentloaded", timeout=15000)
+                    page.wait_for_timeout(3000)
+                    form_found = self._find_greenhouse_form(page)
 
-            # Fill standard Greenhouse fields — try many selectors
+            if not form_found:
+                logger.warning(f"  No form found on {apply_url} (final URL: {page.url})")
+                return False
+
+            # STEP 2: Fill standard Greenhouse fields
             filled_any = False
-            gh_first = ["#first_name", "input[name='job_application[first_name]']", "input[autocomplete='given-name']"]
-            gh_last = ["#last_name", "input[name='job_application[last_name]']", "input[autocomplete='family-name']"]
-            gh_email = ["#email", "input[name='job_application[email]']", "input[autocomplete='email']", "input[type='email']"]
-            gh_phone = ["#phone", "input[name='job_application[phone]']", "input[autocomplete='tel']", "input[type='tel']"]
-            gh_loc = ["#location", "input[name='job_application[location]']", "input[autocomplete='address-level2']"]
+            gh_fields = [
+                (["#first_name", "input[name='job_application[first_name]']", "input[autocomplete='given-name']", "input[name*='first_name']"], PERSONAL_INFO["first_name"]),
+                (["#last_name", "input[name='job_application[last_name]']", "input[autocomplete='family-name']", "input[name*='last_name']"], PERSONAL_INFO["last_name"]),
+                (["#email", "input[name='job_application[email]']", "input[autocomplete='email']", "input[type='email']", "input[name*='email']"], PERSONAL_INFO["email"]),
+                (["#phone", "input[name='job_application[phone]']", "input[autocomplete='tel']", "input[type='tel']", "input[name*='phone']"], PERSONAL_INFO["phone"]),
+                (["#location", "input[name='job_application[location]']", "input[autocomplete='address-level2']"], f"{PERSONAL_INFO['city']}, {PERSONAL_INFO['state']}"),
+            ]
+            for selectors, value in gh_fields:
+                for sel in selectors:
+                    if self._fill_field(page, sel, value):
+                        filled_any = True
+                        break
 
-            for sel in gh_first:
-                if self._fill_field(page, sel, PERSONAL_INFO["first_name"]): filled_any = True; break
-            for sel in gh_last:
-                if self._fill_field(page, sel, PERSONAL_INFO["last_name"]): filled_any = True; break
-            for sel in gh_email:
-                if self._fill_field(page, sel, PERSONAL_INFO["email"]): filled_any = True; break
-            for sel in gh_phone:
-                if self._fill_field(page, sel, PERSONAL_INFO["phone"]): filled_any = True; break
-            for sel in gh_loc:
-                self._fill_field(page, sel, f"{PERSONAL_INFO['city']}, {PERSONAL_INFO['state']}")
-                break
+            # Fill LinkedIn/GitHub/portfolio if fields exist
+            self._fill_field(page, "input[name*='linkedin'], input[placeholder*='LinkedIn']", PERSONAL_INFO["linkedin_url"])
+            self._fill_field(page, "input[name*='github'], input[placeholder*='GitHub']", PERSONAL_INFO["github_url"])
+            self._fill_field(page, "input[name*='website'], input[name*='portfolio'], input[placeholder*='Website']", PERSONAL_INFO["portfolio_url"])
 
             if not filled_any:
                 logger.warning(f"  Could not fill any fields for {job.get('title')} @ {job.get('company')}")
+                return False
 
-            # Upload resume
+            # STEP 3: Upload resume
             resume_uploaded = self._upload_resume(page)
             if not resume_uploaded:
                 logger.warning(f"  Resume upload failed for {job.get('title')}")
 
-            # Answer custom questions
+            # STEP 4: Answer custom questions
             self._answer_greenhouse_questions(page)
 
-            # Submit
+            # STEP 5: Submit
             submitted = self._click_submit(page)
             if submitted:
                 page.wait_for_timeout(3000)
                 if self._check_success(page):
                     return True
-                # Still count as applied if we got past submit without error
-                return True
+                # Still count as applied if we got past submit without error page
+                body_text = page.locator("body").text_content()[:500].lower()
+                if "error" not in body_text and "required" not in body_text:
+                    return True
+                logger.warning(f"  Form may have validation errors for {job.get('title')}")
+                return False
 
             logger.warning(f"  No submit button found for {job.get('title')} @ {job.get('company')}")
             return False
@@ -282,6 +288,23 @@ class PlaywrightJobApplierAgent:
             return False
         finally:
             page.close()
+
+    def _find_greenhouse_form(self, page: Page) -> bool:
+        """Check if a Greenhouse application form is visible on the page."""
+        form_selectors = [
+            "#application-form", "form[data-ui='application-form']",
+            "form.application--form", "#application_form",
+            "#application", "form[action*='applications']",
+            "#main_fields", "div[data-controller='application']",
+            "#first_name", "#email",  # If we can see form fields, form is here
+        ]
+        for sel in form_selectors:
+            try:
+                if page.locator(sel).first.is_visible(timeout=1500):
+                    return True
+            except Exception:
+                continue
+        return False
 
     # ------------------------------------------------------------------
     # Lever
