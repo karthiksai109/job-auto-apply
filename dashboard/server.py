@@ -197,7 +197,7 @@ def _run_apply_batch(batch_size: int = 30):
 
         pw = sync_playwright().start()
         browser = pw.chromium.launch(
-            headless=True,
+            headless=False,
             slow_mo=int(SLOW_MO * 1000) if SLOW_MO < 5 else int(SLOW_MO),
         )
 

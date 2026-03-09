@@ -69,7 +69,7 @@ JOB_TYPE = ["Full-time", "Contract"]
 REMOTE_FILTER = ["Remote", "Hybrid"]
 
 # Daily targets
-DAILY_TARGET = 30
+DAILY_TARGET = 100
 
 # Minimum match score (0-100) to auto-apply
 MIN_MATCH_SCORE = 60
