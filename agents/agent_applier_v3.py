@@ -302,25 +302,51 @@ class PlaywrightJobApplierAgent:
             # STEP 4: Answer custom questions
             self._answer_greenhouse_questions(page)
 
-            # STEP 5: Submit
+            # STEP 5: Click submit (triggers email verification code)
             submitted = self._click_submit(page)
-            if submitted:
-                page.wait_for_timeout(4000)
-                # Check for success indicators
-                body_text = page.locator("body").text_content()[:1000].lower()
-                if self._check_success(page):
-                    logger.info(f"  SUCCESS confirmed for {job.get('title')}")
-                    return True
-                # Check for validation errors
-                if "error" in body_text or "required" in body_text or "please" in body_text:
-                    logger.warning(f"  Form validation errors for {job.get('title')}")
-                    return False
-                # No clear error — likely submitted
-                logger.info(f"  Submit clicked, no errors detected for {job.get('title')}")
-                return True
+            if not submitted:
+                logger.warning(f"  No submit button found for {job.get('title')} @ {job.get('company')}")
+                return False
 
-            logger.warning(f"  No submit button found for {job.get('title')} @ {job.get('company')}")
-            return False
+            page.wait_for_timeout(3000)
+
+            # STEP 6: Check for email verification code prompt
+            body_text = page.locator("body").text_content()[:2000].lower()
+            if "verification code" in body_text or "security code" in body_text:
+                logger.info(f"  ⏳ Verification code required for {job.get('title')} — waiting for manual entry...")
+                # Wait up to 120 seconds for user to enter the code and click submit
+                try:
+                    page.wait_for_function(
+                        """() => {
+                            const body = document.body.textContent.toLowerCase();
+                            return body.includes('thank') || body.includes('received') 
+                                || body.includes('submitted') || body.includes('confirmation')
+                                || !body.includes('security code');
+                        }""",
+                        timeout=120000
+                    )
+                    page.wait_for_timeout(2000)
+                    if self._check_success(page):
+                        logger.info(f"  ✅ SUCCESS confirmed for {job.get('title')}")
+                        return True
+                    # Check if verification code section disappeared
+                    new_body = page.locator("body").text_content()[:1000].lower()
+                    if "security code" not in new_body and "verification code" not in new_body:
+                        logger.info(f"  ✅ Verification completed for {job.get('title')}")
+                        return True
+                except PlaywrightTimeout:
+                    logger.warning(f"  ⏰ Verification code timeout for {job.get('title')} — skipping")
+                    return False
+
+            # No verification code — check for success/errors
+            if self._check_success(page):
+                logger.info(f"  ✅ SUCCESS confirmed for {job.get('title')}")
+                return True
+            if "error" in body_text or "required" in body_text:
+                logger.warning(f"  Form validation errors for {job.get('title')}")
+                return False
+            logger.info(f"  Submit clicked, no errors detected for {job.get('title')}")
+            return True
 
         except PlaywrightTimeout:
             logger.warning(f"  Timeout for {job.get('title')}")
