@@ -503,43 +503,107 @@ class PlaywrightJobApplierAgent:
 
     def _answer_greenhouse_questions(self, page: Page):
         """Answer common Greenhouse custom questions."""
-        # Work authorization
-        self._answer_select_or_radio(page, "authorized", "Yes")
-        self._answer_select_or_radio(page, "authorization", "Yes")
-        self._answer_select_or_radio(page, "legally", "Yes")
-        self._answer_select_or_radio(page, "eligible to work", "Yes")
+        # Work authorization — try multiple keyword variations
+        for kw in ["authorized", "authorization", "legally", "eligible to work", "work in the u", "right to work"]:
+            self._answer_select_or_radio(page, kw, "Yes")
 
-        # Sponsorship
-        self._answer_select_or_radio(page, "sponsor", "No")
-        self._answer_select_or_radio(page, "visa", "No")
+        # Sponsorship — answer No (on OPT, no sponsorship needed now)
+        for kw in ["sponsor", "visa", "immigration"]:
+            self._answer_select_or_radio(page, kw, "No")
+
+        # Gender / demographics (optional but sometimes required dropdowns)
+        for kw in ["gender", "Gender"]:
+            self._answer_select_or_radio(page, kw, "Male")
+        for kw in ["race", "ethnicity", "veteran", "disability"]:
+            self._answer_select_or_radio(page, kw, "Decline")
 
         # Years of experience
-        self._answer_text_question(page, "years of experience", PERSONAL_INFO.get("years_experience", "3"))
-        self._answer_text_question(page, "years experience", PERSONAL_INFO.get("years_experience", "3"))
+        for kw in ["years of experience", "years experience", "experience level"]:
+            self._answer_text_question(page, kw, PERSONAL_INFO.get("years_experience", "3"))
 
-        # LinkedIn
+        # LinkedIn / GitHub / Portfolio
         self._answer_text_question(page, "linkedin", PERSONAL_INFO.get("linkedin_url", ""))
-
-        # GitHub
         self._answer_text_question(page, "github", PERSONAL_INFO.get("github_url", ""))
+        self._answer_text_question(page, "portfolio", PERSONAL_INFO.get("portfolio_url", ""))
+        self._answer_text_question(page, "website", PERSONAL_INFO.get("portfolio_url", ""))
 
         # How did you hear
-        self._answer_text_question(page, "how did you hear", "Company career page")
-        self._answer_text_question(page, "how did you find", "Company career page")
+        for kw in ["how did you hear", "how did you find", "how did you learn", "source", "referral"]:
+            self._answer_text_question(page, kw, "Company career page")
+            self._answer_select_or_radio(page, kw, "Other")
 
         # Salary
-        self._answer_text_question(page, "salary", PERSONAL_INFO.get("salary_expectation", ""))
-        self._answer_text_question(page, "compensation", PERSONAL_INFO.get("salary_expectation", ""))
+        for kw in ["salary", "compensation", "pay expectation"]:
+            self._answer_text_question(page, kw, PERSONAL_INFO.get("salary_expectation", "90000"))
 
         # Location / relocation
         self._answer_text_question(page, "location", f"{PERSONAL_INFO.get('city', '')}, {PERSONAL_INFO.get('state', '')}")
-        self._answer_select_or_radio(page, "reloc", "Yes")
+        self._answer_text_question(page, "address", PERSONAL_INFO.get("address", ""))
+        for kw in ["reloc", "willing to relocate", "open to relocation"]:
+            self._answer_select_or_radio(page, kw, "Yes")
         self._answer_select_or_radio(page, "remote", "Yes")
 
         # Start date
-        self._answer_text_question(page, "start date", "Immediately")
-        self._answer_text_question(page, "when can you start", "Immediately")
-        self._answer_text_question(page, "availability", "Immediately")
+        for kw in ["start date", "when can you start", "availability", "earliest start", "available to start"]:
+            self._answer_text_question(page, kw, "Immediately")
+
+        # Education
+        self._answer_text_question(page, "degree", "Master of Science in Computer Science")
+        self._answer_text_question(page, "university", "Wright State University")
+        self._answer_text_question(page, "school", "Wright State University")
+        self._answer_text_question(page, "graduation", "2025")
+
+        # Fill any remaining required selects with first non-empty option
+        self._fill_required_selects(page)
+
+        # Fill any remaining empty required text inputs with reasonable defaults
+        self._fill_required_text_inputs(page)
+
+    def _fill_required_selects(self, page: Page):
+        """Fill any required select dropdowns that still have no value selected."""
+        try:
+            selects = page.locator("select")
+            for i in range(selects.count()):
+                sel = selects.nth(i)
+                try:
+                    if not sel.is_visible(timeout=300):
+                        continue
+                    # Check if it's still on the default/empty option
+                    current = sel.input_value()
+                    if current and current.strip():
+                        continue
+                    # Select the first non-empty option
+                    options = sel.locator("option")
+                    for j in range(options.count()):
+                        val = options.nth(j).get_attribute("value") or ""
+                        text = options.nth(j).text_content().strip().lower()
+                        if val and val.strip() and text and text not in ["select", "choose", "--", "select...", "please select"]:
+                            sel.select_option(index=j)
+                            break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    def _fill_required_text_inputs(self, page: Page):
+        """Fill any visible empty required text inputs with N/A or reasonable defaults."""
+        try:
+            inputs = page.locator("input[required]:visible, input[aria-required='true']:visible")
+            for i in range(inputs.count()):
+                inp = inputs.nth(i)
+                try:
+                    if not inp.is_visible(timeout=300):
+                        continue
+                    current = inp.input_value()
+                    if current and current.strip():
+                        continue
+                    inp_type = inp.get_attribute("type") or "text"
+                    if inp_type in ["text", "url", "tel", "number"]:
+                        inp.fill("N/A")
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
     def _answer_lever_questions(self, page: Page):
         """Answer common Lever custom questions."""
