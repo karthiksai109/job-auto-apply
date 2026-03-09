@@ -20,6 +20,7 @@ chrome_profile/
 node_modules/
 dashboard/frontend/.next/
 dashboard/frontend/out/
+dashboard/frontend/.netlify/
 
 # OS
 .DS_Store
