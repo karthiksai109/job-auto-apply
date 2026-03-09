@@ -31,7 +31,8 @@ logger = get_logger("Applier_v3")
 
 # Delay between applications to appear human-like
 APPLY_DELAY = 3.0
-FORM_TIMEOUT = 8000  # ms to wait for form elements
+FORM_TIMEOUT = 12000  # ms to wait for form elements
+FIELD_TIMEOUT = 3000  # ms to wait for individual fields
 
 
 class PlaywrightJobApplierAgent:
@@ -166,6 +167,7 @@ class PlaywrightJobApplierAgent:
         """Fill out a Greenhouse application form via Playwright."""
         url = job.get("url", "")
         if not url:
+            logger.warning(f"  No URL for {job.get('title')}")
             return False
 
         # Greenhouse apply pages typically append #app to the job URL
@@ -173,36 +175,73 @@ class PlaywrightJobApplierAgent:
 
         page = self.browser.new_page()
         try:
-            page.goto(apply_url, wait_until="domcontentloaded", timeout=20000)
-            page.wait_for_timeout(2000)  # let JS render
+            page.goto(apply_url, wait_until="domcontentloaded", timeout=25000)
+            page.wait_for_timeout(3000)  # let JS render
 
-            # Look for the application form
-            form = page.locator("form#application-form, form[data-ui='application-form'], form.application--form, form#application_form, form").first
-            if not form.is_visible(timeout=FORM_TIMEOUT):
+            # Look for the application form — try multiple selectors
+            form_found = False
+            form_selectors = [
+                "form#application-form", "form[data-ui='application-form']",
+                "form.application--form", "form#application_form",
+                "div#application", "div[data-controller='application']",
+                "div.application-form", "section#app_body", "form",
+            ]
+            for sel in form_selectors:
+                try:
+                    if page.locator(sel).first.is_visible(timeout=2000):
+                        form_found = True
+                        break
+                except Exception:
+                    continue
+
+            if not form_found:
                 # Some pages need you to click "Apply" button first
-                apply_btn = page.locator("a:has-text('Apply'), button:has-text('Apply')")
-                if apply_btn.count() > 0:
-                    apply_btn.first.click()
-                    page.wait_for_timeout(2000)
+                apply_btns = [
+                    "a:has-text('Apply for this job')", "a:has-text('Apply Now')",
+                    "a:has-text('Apply')", "button:has-text('Apply')",
+                    "a.postings-btn", ".application-page__apply-button",
+                ]
+                for btn_sel in apply_btns:
+                    try:
+                        btn = page.locator(btn_sel).first
+                        if btn.is_visible(timeout=1500):
+                            btn.click()
+                            page.wait_for_timeout(3000)
+                            form_found = True
+                            break
+                    except Exception:
+                        continue
 
-            # Fill standard fields
-            self._fill_field(page, "#first_name", PERSONAL_INFO["first_name"])
-            self._fill_field(page, "#last_name", PERSONAL_INFO["last_name"])
-            self._fill_field(page, "#email", PERSONAL_INFO["email"])
-            self._fill_field(page, "#phone", PERSONAL_INFO["phone"])
-            self._fill_field(page, "#location", f"{PERSONAL_INFO['city']}, {PERSONAL_INFO['state']}")
+            if not form_found:
+                logger.warning(f"  No form found on {apply_url}")
 
-            # Try alternate selectors for Greenhouse forms
-            self._fill_field(page, "input[name='job_application[first_name]']", PERSONAL_INFO["first_name"])
-            self._fill_field(page, "input[name='job_application[last_name]']", PERSONAL_INFO["last_name"])
-            self._fill_field(page, "input[name='job_application[email]']", PERSONAL_INFO["email"])
-            self._fill_field(page, "input[name='job_application[phone]']", PERSONAL_INFO["phone"])
-            self._fill_field(page, "input[name='job_application[location]']", f"{PERSONAL_INFO['city']}, {PERSONAL_INFO['state']}")
+            # Fill standard Greenhouse fields — try many selectors
+            filled_any = False
+            gh_first = ["#first_name", "input[name='job_application[first_name]']", "input[autocomplete='given-name']"]
+            gh_last = ["#last_name", "input[name='job_application[last_name]']", "input[autocomplete='family-name']"]
+            gh_email = ["#email", "input[name='job_application[email]']", "input[autocomplete='email']", "input[type='email']"]
+            gh_phone = ["#phone", "input[name='job_application[phone]']", "input[autocomplete='tel']", "input[type='tel']"]
+            gh_loc = ["#location", "input[name='job_application[location]']", "input[autocomplete='address-level2']"]
+
+            for sel in gh_first:
+                if self._fill_field(page, sel, PERSONAL_INFO["first_name"]): filled_any = True; break
+            for sel in gh_last:
+                if self._fill_field(page, sel, PERSONAL_INFO["last_name"]): filled_any = True; break
+            for sel in gh_email:
+                if self._fill_field(page, sel, PERSONAL_INFO["email"]): filled_any = True; break
+            for sel in gh_phone:
+                if self._fill_field(page, sel, PERSONAL_INFO["phone"]): filled_any = True; break
+            for sel in gh_loc:
+                self._fill_field(page, sel, f"{PERSONAL_INFO['city']}, {PERSONAL_INFO['state']}")
+                break
+
+            if not filled_any:
+                logger.warning(f"  Could not fill any fields for {job.get('title')} @ {job.get('company')}")
 
             # Upload resume
             resume_uploaded = self._upload_resume(page)
             if not resume_uploaded:
-                logger.debug(f"Could not upload resume for {job.get('title')}")
+                logger.warning(f"  Resume upload failed for {job.get('title')}")
 
             # Answer custom questions
             self._answer_greenhouse_questions(page)
@@ -211,20 +250,19 @@ class PlaywrightJobApplierAgent:
             submitted = self._click_submit(page)
             if submitted:
                 page.wait_for_timeout(3000)
-                # Check for success indicators
                 if self._check_success(page):
                     return True
-                else:
-                    logger.debug(f"No success confirmation detected for {job.get('title')}")
-                    # Still count as applied if we got past submit
-                    return True
+                # Still count as applied if we got past submit without error
+                return True
+
+            logger.warning(f"  No submit button found for {job.get('title')} @ {job.get('company')}")
             return False
 
         except PlaywrightTimeout:
-            logger.debug(f"Timeout on {url}")
+            logger.warning(f"  Timeout loading {apply_url}")
             return False
         except Exception as e:
-            logger.debug(f"Greenhouse error: {e}")
+            logger.warning(f"  Greenhouse error for {job.get('title')}: {e}")
             return False
         finally:
             page.close()
@@ -243,25 +281,37 @@ class PlaywrightJobApplierAgent:
 
         page = self.browser.new_page()
         try:
-            page.goto(apply_url, wait_until="domcontentloaded", timeout=20000)
-            page.wait_for_timeout(2000)
+            page.goto(apply_url, wait_until="domcontentloaded", timeout=25000)
+            page.wait_for_timeout(3000)
 
             # Lever forms use specific input names
-            self._fill_field(page, "input[name='name']",
-                             f"{PERSONAL_INFO['first_name']} {PERSONAL_INFO['last_name']}")
-            self._fill_field(page, "input[name='email']", PERSONAL_INFO["email"])
-            self._fill_field(page, "input[name='phone']", PERSONAL_INFO["phone"])
+            filled = False
+            for sel in ["input[name='name']", "input[placeholder*='name']"]:
+                if self._fill_field(page, sel, f"{PERSONAL_INFO['first_name']} {PERSONAL_INFO['last_name']}"):
+                    filled = True; break
+            for sel in ["input[name='email']", "input[type='email']"]:
+                if self._fill_field(page, sel, PERSONAL_INFO["email"]):
+                    filled = True; break
+            for sel in ["input[name='phone']", "input[type='tel']"]:
+                self._fill_field(page, sel, PERSONAL_INFO["phone"]); break
+
             self._fill_field(page, "input[name='org']", "")
             self._fill_field(page, "input[name='urls[LinkedIn]']", PERSONAL_INFO.get("linkedin_url", ""))
             self._fill_field(page, "input[name='urls[GitHub]']", PERSONAL_INFO.get("github_url", ""))
             self._fill_field(page, "input[name='urls[Portfolio]']", PERSONAL_INFO.get("portfolio_url", ""))
 
+            if not filled:
+                logger.warning(f"  Could not fill Lever form for {job.get('title')} @ {job.get('company')}")
+
             # Generate and fill cover note
             comments = self._generate_cover_note(job)
             self._fill_field(page, "textarea[name='comments']", comments)
+            self._fill_field(page, "textarea[name='additional']", comments)
 
             # Upload resume
-            self._upload_resume(page)
+            resume_uploaded = self._upload_resume(page)
+            if not resume_uploaded:
+                logger.warning(f"  Resume upload failed for Lever: {job.get('title')}")
 
             # Answer custom questions
             self._answer_lever_questions(page)
@@ -271,13 +321,15 @@ class PlaywrightJobApplierAgent:
             if submitted:
                 page.wait_for_timeout(3000)
                 return True
+
+            logger.warning(f"  No submit button for Lever: {job.get('title')} @ {job.get('company')}")
             return False
 
         except PlaywrightTimeout:
-            logger.debug(f"Timeout on {url}")
+            logger.warning(f"  Timeout on Lever {apply_url}")
             return False
         except Exception as e:
-            logger.debug(f"Lever error: {e}")
+            logger.warning(f"  Lever error for {job.get('title')}: {e}")
             return False
         finally:
             page.close()
@@ -291,7 +343,8 @@ class PlaywrightJobApplierAgent:
             return False
         try:
             el = page.locator(selector).first
-            if el.is_visible(timeout=1000):
+            if el.is_visible(timeout=FIELD_TIMEOUT):
+                el.scroll_into_view_if_needed(timeout=2000)
                 el.click()
                 el.fill(value)
                 return True

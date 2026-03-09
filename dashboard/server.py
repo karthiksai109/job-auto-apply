@@ -180,9 +180,20 @@ def _run_apply_batch(batch_size: int = 30):
 
         _log("applier", f"Found {len(eligible)} eligible jobs (junior/entry/intern, score≥60)")
 
+        import logging
         from agents.agent_applier_v3 import PlaywrightJobApplierAgent
         from agents.config import HEADLESS, SLOW_MO
         from playwright.sync_api import sync_playwright
+
+        # Hook applier logger to dashboard logs
+        class DashboardLogHandler(logging.Handler):
+            def emit(self, record):
+                level = "error" if record.levelno >= logging.ERROR else "warn" if record.levelno >= logging.WARNING else "info"
+                _log("applier", record.getMessage(), level)
+
+        applier_logger = logging.getLogger("Applier_v3")
+        dash_handler = DashboardLogHandler()
+        applier_logger.addHandler(dash_handler)
 
         pw = sync_playwright().start()
         browser = pw.chromium.launch(
@@ -197,13 +208,15 @@ def _run_apply_batch(batch_size: int = 30):
         applier.pw = pw
         applier.browser = browser
 
+        _log("applier", f"Resume path: {os.path.exists(RESUME_PATH)} ({RESUME_PATH})")
+
         for i, job in enumerate(eligible[:batch_size]):
             title = job.get("title", "?")
             company = job.get("company", "?")
             score = job.get("match_score", "?")
             ats = job.get("ats_type", "")
 
-            _log("applier", f"[{i+1}/{min(batch_size, len(eligible))}] Applying: {title} @ {company} [{score}]")
+            _log("applier", f"[{i+1}/{min(batch_size, len(eligible))}] Applying: {title} @ {company} [{score}] ({ats})")
             agent_states["applier"]["stats"] = {
                 "current_job": f"{title} @ {company}",
                 "progress": i + 1,
@@ -219,7 +232,7 @@ def _run_apply_batch(batch_size: int = 30):
                     success = applier._apply_lever(job)
                 else:
                     update_job_status(job["url"], "manual_apply_needed")
-                    _log("applier", f"  → Manual: {title} @ {company}", "warn")
+                    _log("applier", f"  → Manual: {title} @ {company} (ats={ats})", "warn")
                     continue
 
                 if success:
@@ -237,6 +250,9 @@ def _run_apply_batch(batch_size: int = 30):
                 failed_count += 1
                 update_job_status(job["url"], JobStatus.FAILED_TO_APPLY)
                 _log("applier", f"  Error: {title} @ {company}: {e}", "error")
+
+        # Remove dashboard handler
+        applier_logger.removeHandler(dash_handler)
 
         browser.close()
         pw.stop()
