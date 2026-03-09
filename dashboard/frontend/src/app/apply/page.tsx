@@ -1,36 +1,10 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { fetchEligibleJobs, fetchAgents, fetchStats, startApply } from "../components/api";
-import {
-  Rocket,
-  Play,
-  Loader2,
-  CheckCircle2,
-  XCircle,
-  RefreshCw,
-  Zap,
-  Star,
-  Building2,
-} from "lucide-react";
+import { Rocket, Play, Loader2, CheckCircle2, RefreshCw, Building2 } from "lucide-react";
 
-interface Job {
-  title: string;
-  company: string;
-  location: string;
-  match_score: number;
-  ats_type: string;
-  match_reason: string;
-  matched_skills: string[];
-}
-
-interface AgentStats {
-  current_job?: string;
-  progress?: number;
-  total?: number;
-  applied?: number;
-  failed?: number;
-  jobs_applied?: { title: string; company: string; score: number }[];
-}
+interface Job { title: string; company: string; location: string; match_score: number; ats_type: string; match_reason: string; matched_skills: string[]; }
+interface AgentStats { current_job?: string; progress?: number; total?: number; applied?: number; failed?: number; jobs_applied?: { title: string; company: string; score: number }[]; }
 
 export default function ApplyPage() {
   const [eligible, setEligible] = useState<Job[]>([]);
@@ -49,7 +23,6 @@ export default function ApplyPage() {
     fetchStats().then((s) => setDailyStats({ applied_today: s.applied_today, daily_target: s.daily_target })).catch(() => {});
   }, [loadEligible]);
 
-  // Poll agent status while running
   useEffect(() => {
     if (!isRunning) return;
     const interval = setInterval(() => {
@@ -70,62 +43,44 @@ export default function ApplyPage() {
     return () => clearInterval(interval);
   }, [isRunning, loadEligible]);
 
-  const handleApply = async () => {
-    setIsRunning(true);
-    setBatchComplete(false);
-    setStats({});
-    setLogs([]);
-    await startApply(30);
-  };
-
-  const handleNextBatch = () => {
-    setBatchComplete(false);
-    loadEligible();
-    handleApply();
-  };
-
+  const handleApply = async () => { setIsRunning(true); setBatchComplete(false); setStats({}); setLogs([]); await startApply(30); };
+  const handleNextBatch = () => { setBatchComplete(false); loadEligible(); handleApply(); };
   const progress = stats.progress && stats.total ? (stats.progress / stats.total) * 100 : 0;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Rocket className="w-6 h-6 text-indigo-400" />
-            Apply to Jobs
+          <h1 className="text-xl font-semibold flex items-center gap-2" style={{ color: "#1a1a1a" }}>
+            <Rocket className="w-5 h-5" style={{ color: "#c96442" }} />
+            Apply
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            {eligible.length} eligible jobs ready — Junior/Entry/Intern roles matching your resume
+          <p className="text-[13px] mt-1" style={{ color: "#9a9a9a" }}>
+            {eligible.length} eligible jobs — Junior/Entry/Intern roles
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-500">Today</p>
-          <p className="text-lg font-bold text-indigo-400">
+          <p className="text-[10px] uppercase tracking-wider" style={{ color: "#9a9a9a" }}>Today</p>
+          <p className="text-lg font-semibold" style={{ color: "#c96442" }}>
             {dailyStats.applied_today} / {dailyStats.daily_target}
           </p>
         </div>
       </div>
 
-      {/* Main Action Card */}
-      <div className="glass-card rounded-2xl p-8">
+      {/* Main Action */}
+      <div className="glass-card p-8">
         {!isRunning && !batchComplete && (
           <div className="text-center">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-6">
-              <Zap className="w-10 h-10 text-white" />
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: "#f0ddd4" }}>
+              <Rocket className="w-8 h-8" style={{ color: "#c96442" }} />
             </div>
-            <h2 className="text-xl font-bold text-white mb-2">
-              Ready to Apply
-            </h2>
-            <p className="text-sm text-slate-400 mb-6 max-w-md mx-auto">
-              {eligible.length} jobs matched to your profile. Click below to start
-              applying to the top 30 via Playwright browser automation.
+            <h2 className="text-lg font-semibold mb-2" style={{ color: "#1a1a1a" }}>Ready to Apply</h2>
+            <p className="text-[13px] mb-6 max-w-md mx-auto" style={{ color: "#9a9a9a" }}>
+              {eligible.length} jobs matched to your profile. Playwright will open a browser and submit applications automatically.
             </p>
-            <button
-              onClick={handleApply}
-              disabled={eligible.length === 0}
-              className="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-            >
+            <button onClick={handleApply} disabled={eligible.length === 0}
+              className="inline-flex items-center gap-2 px-7 py-2.5 rounded-xl text-white text-[13px] font-semibold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "#c96442" }}>
               <Play className="w-4 h-4" />
               Apply to {Math.min(30, eligible.length)} Jobs
             </button>
@@ -134,65 +89,39 @@ export default function ApplyPage() {
 
         {isRunning && (
           <div>
-            <div className="flex items-center gap-3 mb-6">
-              <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+            <div className="flex items-center gap-3 mb-5">
+              <Loader2 className="w-5 h-5 animate-spin" style={{ color: "#c96442" }} />
               <div>
-                <h2 className="text-lg font-bold text-white">Applying...</h2>
-                <p className="text-xs text-slate-400">
-                  {stats.current_job || "Starting up..."}
-                </p>
+                <h2 className="text-[15px] font-semibold" style={{ color: "#1a1a1a" }}>Applying...</h2>
+                <p className="text-[12px]" style={{ color: "#9a9a9a" }}>{stats.current_job || "Starting up..."}</p>
               </div>
             </div>
-
-            {/* Progress */}
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-slate-400">
-                  Job {stats.progress || 0} of {stats.total || "..."}
-                </span>
-                <span className="text-xs font-mono text-indigo-400">
-                  {Math.round(progress)}%
-                </span>
+                <span className="text-[12px]" style={{ color: "#6b6b6b" }}>Job {stats.progress || 0} of {stats.total || "..."}</span>
+                <span className="text-[12px] font-mono" style={{ color: "#c96442" }}>{Math.round(progress)}%</span>
               </div>
-              <div className="w-full h-2.5 bg-[#1e293b] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-700"
-                  style={{ width: `${progress}%` }}
-                />
+              <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: "#f0ece6" }}>
+                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${progress}%`, background: "#c96442" }} />
               </div>
             </div>
-
-            {/* Live Stats */}
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-emerald-400">{stats.applied || 0}</p>
-                <p className="text-[10px] text-emerald-400/60 uppercase tracking-wider">Applied</p>
+              <div className="rounded-lg p-3 text-center" style={{ background: "#dff0e5" }}>
+                <p className="text-2xl font-bold" style={{ color: "#3d8b5e" }}>{stats.applied || 0}</p>
+                <p className="text-[10px] uppercase tracking-wider" style={{ color: "#5b8a72" }}>Applied</p>
               </div>
-              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-red-400">{stats.failed || 0}</p>
-                <p className="text-[10px] text-red-400/60 uppercase tracking-wider">Failed</p>
+              <div className="rounded-lg p-3 text-center" style={{ background: "#f5ddd8" }}>
+                <p className="text-2xl font-bold" style={{ color: "#c25a4a" }}>{stats.failed || 0}</p>
+                <p className="text-[10px] uppercase tracking-wider" style={{ color: "#c25a4a" }}>Failed</p>
               </div>
             </div>
-
-            {/* Live Logs */}
-            <div className="bg-[#060b14] rounded-lg p-4 max-h-60 overflow-y-auto">
-              <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-2">Live Logs</p>
-              {logs.slice(-15).map((log, i) => (
+            <div className="rounded-lg p-4 max-h-52 overflow-y-auto" style={{ background: "#faf9f7", border: "1px solid #e8e5e0" }}>
+              <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "#d4d0c8" }}>Live Logs</p>
+              {logs.slice(-12).map((log, i) => (
                 <div key={i} className="flex items-start gap-2 py-0.5">
-                  <span className="text-[10px] font-mono text-slate-600 flex-shrink-0">
-                    {log.ts}
-                  </span>
-                  <span
-                    className={`text-[11px] font-mono ${
-                      log.level === "error"
-                        ? "text-red-400"
-                        : log.level === "warn"
-                        ? "text-amber-400"
-                        : log.msg.includes("✓")
-                        ? "text-emerald-400"
-                        : "text-slate-400"
-                    }`}
-                  >
+                  <span className="text-[10px] font-mono flex-shrink-0" style={{ color: "#d4d0c8" }}>{log.ts}</span>
+                  <span className="text-[10px] font-mono"
+                    style={{ color: log.level === "error" ? "#c25a4a" : log.level === "warn" ? "#c49231" : log.msg.includes("Applied") ? "#3d8b5e" : "#9a9a9a" }}>
                     {log.msg}
                   </span>
                 </div>
@@ -203,90 +132,66 @@ export default function ApplyPage() {
 
         {batchComplete && (
           <div className="text-center">
-            <CheckCircle2 className="w-16 h-16 text-emerald-400 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-white mb-2">
-              Batch Complete!
-            </h2>
-            <p className="text-sm text-slate-400 mb-2">
-              Applied to <span className="text-emerald-400 font-bold">{stats.applied || 0}</span> jobs
-              {stats.failed ? (
-                <>, <span className="text-red-400 font-bold">{stats.failed}</span> failed</>
-              ) : null}
+            <CheckCircle2 className="w-14 h-14 mx-auto mb-4" style={{ color: "#3d8b5e" }} />
+            <h2 className="text-lg font-semibold mb-2" style={{ color: "#1a1a1a" }}>Batch Complete</h2>
+            <p className="text-[13px] mb-1" style={{ color: "#6b6b6b" }}>
+              Applied to <span style={{ color: "#3d8b5e", fontWeight: 600 }}>{stats.applied || 0}</span> jobs
+              {stats.failed ? (<>, <span style={{ color: "#c25a4a", fontWeight: 600 }}>{stats.failed}</span> failed</>) : null}
             </p>
-            <p className="text-xs text-slate-500 mb-6">
-              Email notification sent with application details
-            </p>
-
-            {/* Applied jobs list */}
+            <p className="text-[11px] mb-6" style={{ color: "#9a9a9a" }}>Email notification sent</p>
             {stats.jobs_applied && stats.jobs_applied.length > 0 && (
               <div className="mb-6 text-left max-w-md mx-auto">
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Applications Submitted</p>
+                <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "#9a9a9a" }}>Submitted</p>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
                   {stats.jobs_applied.map((j, i) => (
-                    <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+                    <div key={i} className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: "#dff0e5" }}>
                       <div className="flex items-center gap-2 min-w-0">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                        <span className="text-xs text-slate-300 truncate">{j.title}</span>
+                        <CheckCircle2 className="w-3 h-3 flex-shrink-0" style={{ color: "#3d8b5e" }} />
+                        <span className="text-[12px] truncate" style={{ color: "#1a1a1a" }}>{j.title}</span>
                       </div>
-                      <span className="text-[10px] text-slate-500 flex-shrink-0 ml-2">{j.company}</span>
+                      <span className="text-[10px] flex-shrink-0 ml-2" style={{ color: "#6b6b6b" }}>{j.company}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-
             {eligible.length > 0 && (
-              <button
-                onClick={handleNextBatch}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold text-sm hover:opacity-90 transition-opacity"
-              >
+              <button onClick={handleNextBatch}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-[13px] font-semibold hover:opacity-90 transition"
+                style={{ background: "#c96442" }}>
                 <RefreshCw className="w-4 h-4" />
-                Apply to Next {Math.min(30, eligible.length)} Jobs
+                Next {Math.min(30, eligible.length)} Jobs
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* Eligible Jobs Preview */}
+      {/* Queue */}
       {!isRunning && (
         <div>
-          <h3 className="text-sm font-semibold text-slate-300 mb-3">
-            Next {Math.min(30, eligible.length)} Jobs to Apply
+          <h3 className="text-[13px] font-semibold mb-3" style={{ color: "#6b6b6b" }}>
+            Next {Math.min(30, eligible.length)} in queue
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {eligible.slice(0, 30).map((job, i) => (
-              <div
-                key={i}
-                className="glass-card rounded-lg px-4 py-3 flex items-center justify-between animate-slide-up"
-                style={{ animationDelay: `${Math.min(i * 20, 200)}ms` }}
-              >
+              <div key={i} className="glass-card px-4 py-2.5 flex items-center justify-between animate-slide-up"
+                style={{ animationDelay: `${Math.min(i * 15, 150)}ms` }}>
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-[10px] text-slate-600 font-mono w-5 text-right flex-shrink-0">
-                    {i + 1}
-                  </span>
+                  <span className="text-[10px] font-mono w-5 text-right flex-shrink-0" style={{ color: "#d4d0c8" }}>{i + 1}</span>
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-slate-200 truncate">
-                      {job.title}
-                    </p>
-                    <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                      <Building2 className="w-2.5 h-2.5" />
-                      {job.company}
+                    <p className="text-[12px] font-medium truncate" style={{ color: "#1a1a1a" }}>{job.title}</p>
+                    <p className="text-[10px] flex items-center gap-1" style={{ color: "#9a9a9a" }}>
+                      <Building2 className="w-2.5 h-2.5" />{job.company}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <div className="flex gap-0.5">
-                    {job.matched_skills.slice(0, 3).map((s) => (
-                      <span key={s} className="text-[8px] px-1 py-0.5 rounded bg-indigo-500/10 text-indigo-400">
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                    job.match_score >= 80 ? "text-emerald-400 bg-emerald-500/20" : "text-amber-400 bg-amber-500/20"
-                  }`}>
-                    <Star className="w-2.5 h-2.5 inline mr-0.5" />
+                  {job.matched_skills.slice(0, 2).map((s) => (
+                    <span key={s} className="text-[8px] px-1.5 py-0.5 rounded" style={{ background: "#f0ece6", color: "#8a7560" }}>{s}</span>
+                  ))}
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg"
+                    style={job.match_score >= 80 ? { background: "#dff0e5", color: "#3d8b5e" } : { background: "#faf0d8", color: "#c49231" }}>
                     {job.match_score}
                   </span>
                 </div>

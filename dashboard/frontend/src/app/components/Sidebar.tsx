@@ -7,7 +7,6 @@ import {
   Briefcase,
   Rocket,
   CheckCircle2,
-  Zap,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -23,20 +22,20 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden lg:flex flex-col w-64 bg-[#0a0f1a] border-r border-[#1e293b] p-4">
+    <aside className="hidden lg:flex flex-col w-60" style={{ background: "#f3f1ee", borderRight: "1px solid #e8e5e0" }}>
       {/* Logo */}
-      <div className="flex items-center gap-3 px-3 py-4 mb-6">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-          <Zap className="w-5 h-5 text-white" />
+      <div className="flex items-center gap-3 px-5 py-6 mb-2">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base" style={{ background: "#c96442", color: "#fff" }}>
+          A
         </div>
         <div>
-          <h1 className="text-sm font-bold text-white tracking-tight">AgentApply AI</h1>
-          <p className="text-[10px] text-slate-500 uppercase tracking-widest">Multi-Agent System</p>
+          <h1 className="text-[13px] font-semibold" style={{ color: "#1a1a1a", letterSpacing: "-0.02em" }}>AgentApply</h1>
+          <p className="text-[10px]" style={{ color: "#9a9a9a" }}>by Karthik</p>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 space-y-1">
+      <nav className="flex-1 px-3 space-y-0.5">
         {NAV.map(({ href, label, icon: Icon }) => {
           const active = pathname === href;
           return (
@@ -44,11 +43,17 @@ export default function Sidebar() {
               key={href}
               href={href}
               className={clsx(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                active
-                  ? "bg-indigo-500/15 text-indigo-400 border border-indigo-500/30"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
               )}
+              style={active ? {
+                background: "#ffffff",
+                color: "#c96442",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                border: "1px solid #e8e5e0",
+              } : {
+                color: "#6b6b6b",
+                border: "1px solid transparent",
+              }}
             >
               <Icon className="w-4 h-4" />
               {label}
@@ -58,14 +63,14 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="mt-auto px-3 py-4 border-t border-[#1e293b]">
+      <div className="px-5 py-5" style={{ borderTop: "1px solid #e8e5e0" }}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-xs font-bold text-white">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "#c96442", color: "#fff" }}>
             KR
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-300">Karthik Ramadugu</p>
-            <p className="text-[10px] text-slate-500">Full Stack Developer</p>
+            <p className="text-[11px] font-medium" style={{ color: "#1a1a1a" }}>Karthik Ramadugu</p>
+            <p className="text-[10px]" style={{ color: "#9a9a9a" }}>M.S. CS · Dayton</p>
           </div>
         </div>
       </div>

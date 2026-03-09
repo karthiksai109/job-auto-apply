@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { fetchStats, fetchAgents } from "./components/api";
 import {
-  Activity,
   Briefcase,
   CheckCircle2,
   XCircle,
@@ -10,6 +9,7 @@ import {
   TrendingUp,
   Bot,
   Rocket,
+  ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -32,20 +32,20 @@ interface AgentState {
 }
 
 const STAT_CARDS = [
-  { key: "total_jobs", label: "Total Jobs", icon: Briefcase, color: "from-indigo-500 to-purple-600" },
-  { key: "applied", label: "Applied", icon: CheckCircle2, color: "from-emerald-500 to-teal-600" },
-  { key: "applied_today", label: "Applied Today", icon: TrendingUp, color: "from-amber-500 to-orange-600" },
-  { key: "eligible_to_apply", label: "Ready to Apply", icon: Rocket, color: "from-cyan-500 to-blue-600" },
-  { key: "failed", label: "Failed", icon: XCircle, color: "from-red-500 to-rose-600" },
-  { key: "remaining_today", label: "Remaining Today", icon: Clock, color: "from-violet-500 to-fuchsia-600" },
+  { key: "total_jobs", label: "Total Jobs", icon: Briefcase, bg: "#f0ece6", fg: "#8a7560" },
+  { key: "applied", label: "Applied", icon: CheckCircle2, bg: "#dff0e5", fg: "#3d8b5e" },
+  { key: "applied_today", label: "Today", icon: TrendingUp, bg: "#f0ddd4", fg: "#c96442" },
+  { key: "eligible_to_apply", label: "Ready", icon: Rocket, bg: "#faf0d8", fg: "#c49231" },
+  { key: "failed", label: "Failed", icon: XCircle, bg: "#f5ddd8", fg: "#c25a4a" },
+  { key: "remaining_today", label: "Remaining", icon: Clock, bg: "#e8e5f5", fg: "#7c6bae" },
 ];
 
-const AGENT_NAMES: Record<string, { label: string; desc: string }> = {
-  scraper: { label: "Scraper Agent", desc: "Scrapes Greenhouse, Lever, RemoteOK" },
-  applier: { label: "Applier Agent", desc: "Playwright browser automation" },
-  matcher: { label: "Matcher Agent", desc: "Experience-aware scoring engine" },
-  tracker: { label: "Tracker Agent", desc: "Excel + DB sync" },
-  notifier: { label: "Notifier Agent", desc: "Email notifications" },
+const AGENT_NAMES: Record<string, { label: string; desc: string; color: string }> = {
+  scraper: { label: "Scraper", desc: "Greenhouse, Lever, RemoteOK", color: "#5b8a72" },
+  applier: { label: "Applier", desc: "Playwright browser automation", color: "#c96442" },
+  matcher: { label: "Matcher", desc: "Experience-aware scoring", color: "#c49231" },
+  tracker: { label: "Tracker", desc: "Excel + DB sync", color: "#7c6bae" },
+  notifier: { label: "Notifier", desc: "Email reports", color: "#8a7560" },
 };
 
 export default function Dashboard() {
@@ -63,58 +63,57 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="max-w-6xl mx-auto space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Multi-Agent AI Job Application System — Real-time Overview
+          <h1 className="text-xl font-semibold" style={{ color: "#1a1a1a" }}>Dashboard</h1>
+          <p className="text-[13px] mt-1" style={{ color: "#9a9a9a" }}>
+            Real-time overview of your autonomous job application system
           </p>
         </div>
         <Link
           href="/apply"
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          className="flex items-center gap-2 px-5 py-2 rounded-lg text-white text-[13px] font-medium hover:opacity-90 transition-opacity"
+          style={{ background: "#c96442" }}
         >
-          <Rocket className="w-4 h-4" />
+          <Rocket className="w-3.5 h-3.5" />
           Apply Now
         </Link>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {STAT_CARDS.map(({ key, label, icon: Icon, color }) => (
-          <div
-            key={key}
-            className="glass-card rounded-xl p-4 animate-slide-up"
-          >
-            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${color} flex items-center justify-center mb-3`}>
-              <Icon className="w-4 h-4 text-white" />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {STAT_CARDS.map(({ key, label, icon: Icon, bg, fg }) => (
+          <div key={key} className="glass-card p-4 animate-slide-up">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ background: bg }}>
+              <Icon className="w-4 h-4" style={{ color: fg }} />
             </div>
-            <p className="text-2xl font-bold text-white">
+            <p className="text-2xl font-semibold" style={{ color: "#1a1a1a" }}>
               {stats ? (stats as unknown as Record<string, number>)[key] ?? 0 : "—"}
             </p>
-            <p className="text-xs text-slate-400 mt-1">{label}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: "#9a9a9a" }}>{label}</p>
           </div>
         ))}
       </div>
 
       {/* Progress Bar */}
       {stats && (
-        <div className="glass-card rounded-xl p-5">
+        <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-slate-300">
+            <span className="text-[13px] font-medium" style={{ color: "#1a1a1a" }}>
               Daily Progress
             </span>
-            <span className="text-sm text-indigo-400 font-mono">
+            <span className="text-[13px] font-mono" style={{ color: "#c96442" }}>
               {stats.applied_today} / {stats.daily_target}
             </span>
           </div>
-          <div className="w-full h-3 bg-[#1e293b] rounded-full overflow-hidden">
+          <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: "#f0ece6" }}>
             <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+              className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${Math.min(100, (stats.applied_today / stats.daily_target) * 100)}%`,
+                background: "#c96442",
               }}
             />
           </div>
@@ -123,51 +122,43 @@ export default function Dashboard() {
 
       {/* Agents Status */}
       <div>
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Bot className="w-5 h-5 text-indigo-400" />
-          Agent Status
+        <h2 className="text-[15px] font-semibold mb-4 flex items-center gap-2" style={{ color: "#1a1a1a" }}>
+          <Bot className="w-4 h-4" style={{ color: "#c96442" }} />
+          Agents
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.entries(AGENT_NAMES).map(([key, { label, desc }]) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Object.entries(AGENT_NAMES).map(([key, { label, desc, color }]) => {
             const agent = agents?.[key];
             const isRunning = agent?.status === "running";
             return (
               <div
                 key={key}
-                className={`glass-card rounded-xl p-5 transition-all duration-300 ${
-                  isRunning ? "animate-pulse-glow border-indigo-500/40" : ""
-                }`}
+                className={`glass-card p-4 ${isRunning ? "animate-pulse-glow" : ""}`}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-white">{label}</h3>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: isRunning ? color : "#d4d0c8" }} />
+                    <h3 className="text-[13px] font-semibold" style={{ color: "#1a1a1a" }}>{label}</h3>
+                  </div>
                   <span
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                      isRunning
-                        ? "bg-indigo-500/20 text-indigo-400"
-                        : "bg-emerald-500/20 text-emerald-400"
-                    }`}
+                    className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                    style={isRunning ? {
+                      background: "#f0ddd4", color: "#c96442"
+                    } : {
+                      background: "#dff0e5", color: "#3d8b5e"
+                    }}
                   >
                     {agent?.status || "idle"}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mb-3">{desc}</p>
-                {agent?.last_run && (
-                  <p className="text-[10px] text-slate-500">
-                    Last run: {new Date(agent.last_run).toLocaleString()}
-                  </p>
-                )}
+                <p className="text-[11px] mb-2" style={{ color: "#9a9a9a" }}>{desc}</p>
                 {agent?.logs && agent.logs.length > 0 && (
-                  <div className="mt-3 max-h-20 overflow-y-auto">
-                    {agent.logs.slice(-3).map((log, i) => (
+                  <div className="mt-2 max-h-16 overflow-y-auto">
+                    {agent.logs.slice(-2).map((log, i) => (
                       <p
                         key={i}
-                        className={`text-[10px] font-mono truncate ${
-                          log.level === "error"
-                            ? "text-red-400"
-                            : log.level === "warn"
-                            ? "text-amber-400"
-                            : "text-slate-500"
-                        }`}
+                        className="text-[10px] font-mono truncate"
+                        style={{ color: log.level === "error" ? "#c25a4a" : log.level === "warn" ? "#c49231" : "#9a9a9a" }}
                       >
                         {log.ts} {log.msg}
                       </p>
@@ -180,31 +171,28 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Architecture */}
-      <div className="glass-card rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Activity className="w-5 h-5 text-indigo-400" />
+      {/* Pipeline */}
+      <div className="glass-card p-6">
+        <h2 className="text-[13px] font-semibold mb-5 text-center" style={{ color: "#6b6b6b" }}>
           Agent Pipeline
         </h2>
-        <div className="flex items-center justify-center gap-2 flex-wrap">
-          {["Scraper", "Matcher", "Applier", "Tracker", "Notifier"].map(
-            (name, i) => (
-              <div key={name} className="flex items-center gap-2">
-                <div className="px-4 py-2 rounded-lg bg-[#1e293b] text-xs font-medium text-slate-300 border border-[#334155]">
-                  {name}
-                </div>
-                {i < 4 && (
-                  <svg width="24" height="12" viewBox="0 0 24 12" className="text-indigo-500">
-                    <path d="M0 6h18M14 1l6 5-6 5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                  </svg>
-                )}
+        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+          {[
+            { name: "Scrape", sub: "50+ companies" },
+            { name: "Score", sub: "Junior/Entry filter" },
+            { name: "Apply", sub: "Playwright" },
+            { name: "Track", sub: "Excel + DB" },
+            { name: "Notify", sub: "Email report" },
+          ].map((step, i) => (
+            <div key={step.name} className="flex items-center gap-1.5">
+              <div className="px-4 py-2.5 rounded-lg text-center" style={{ background: "#f0ece6" }}>
+                <p className="text-[12px] font-semibold" style={{ color: "#1a1a1a" }}>{step.name}</p>
+                <p className="text-[9px]" style={{ color: "#9a9a9a" }}>{step.sub}</p>
               </div>
-            )
-          )}
+              {i < 4 && <ArrowRight className="w-3.5 h-3.5" style={{ color: "#d4d0c8" }} />}
+            </div>
+          ))}
         </div>
-        <p className="text-center text-[11px] text-slate-500 mt-4">
-          Scrape → Score & Filter (Junior/Entry only) → Apply via Playwright → Track in Excel → Email Report
-        </p>
       </div>
     </div>
   );
