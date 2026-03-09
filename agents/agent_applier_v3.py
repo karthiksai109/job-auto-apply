@@ -502,65 +502,267 @@ class PlaywrightJobApplierAgent:
         return False
 
     def _answer_greenhouse_questions(self, page: Page):
-        """Answer common Greenhouse custom questions."""
-        # Work authorization — try multiple keyword variations
-        for kw in ["authorized", "authorization", "legally", "eligible to work", "work in the u", "right to work"]:
-            self._answer_select_or_radio(page, kw, "Yes")
+        """Answer common Greenhouse custom questions using React Select dropdowns + text fields."""
+        # Map: (keyword in label) -> (preferred answer for dropdown OR text value)
+        # These use React Select dropdowns (not standard <select>)
+        dropdown_answers = [
+            # Work authorization
+            ("authorized", "Yes"),
+            ("authorization", "Yes"),
+            ("legally", "Yes"),
+            ("eligible to work", "Yes"),
+            ("work in the u", "Yes"),
+            ("right to work", "Yes"),
+            # Sponsorship
+            ("sponsor", "No"),
+            ("visa", "No"),
+            ("immigration", "No"),
+            # Agreement / consent / disclaimer
+            ("I agree", "I agree"),
+            ("i agree", "I agree"),
+            ("acknowledge", "I agree"),
+            ("consent", "I agree"),
+            ("selecting", "I agree"),
+            ("understand that", "I agree"),
+            ("By selecting", "I agree"),
+            # Location questions
+            ("located in colorado", "No"),
+            ("located in", "No"),
+            # Demographics (EEO) — voluntary self-identification
+            ("gender identity", "Male"),
+            ("transgender", "I don't wish to answer"),
+            ("sexual orientation", "I don't wish to answer"),
+            ("disability", "I don't wish to answer"),
+            ("veteran", "No military service"),
+            ("military", "No military service"),
+            ("ethnicity", "South Asian"),
+            ("ethnicities", "South Asian"),
+            ("race", "South Asian"),
+            # Relocation / travel / work arrangement
+            ("reloc", "Yes"),
+            ("willing to relocate", "Yes"),
+            ("open to relocation", "Yes"),
+            ("remote", "Yes"),
+            ("on-site", "Yes"),
+            ("hybrid", "Yes"),
+            ("travel", "Yes"),
+            ("willing to travel", "Yes"),
+            ("% travel", "Yes"),
+            # 18+
+            ("18 years", "Yes"),
+            ("age of 18", "Yes"),
+        ]
 
-        # Sponsorship — answer No (on OPT, no sponsorship needed now)
-        for kw in ["sponsor", "visa", "immigration"]:
-            self._answer_select_or_radio(page, kw, "No")
+        for keyword, answer in dropdown_answers:
+            self._answer_react_select(page, keyword, answer)
+            self._answer_select_or_radio(page, keyword, answer)
 
-        # Gender / demographics (optional but sometimes required dropdowns)
-        for kw in ["gender", "Gender"]:
-            self._answer_select_or_radio(page, kw, "Male")
-        for kw in ["race", "ethnicity", "veteran", "disability"]:
-            self._answer_select_or_radio(page, kw, "Decline")
+        # Text field questions
+        text_answers = [
+            ("years of experience", PERSONAL_INFO.get("years_experience", "3")),
+            ("years experience", PERSONAL_INFO.get("years_experience", "3")),
+            ("experience level", PERSONAL_INFO.get("years_experience", "3")),
+            ("linkedin", PERSONAL_INFO.get("linkedin_url", "")),
+            ("github", PERSONAL_INFO.get("github_url", "")),
+            ("portfolio", PERSONAL_INFO.get("portfolio_url", "")),
+            ("website", PERSONAL_INFO.get("portfolio_url", "")),
+            ("how did you hear", "Recruiter outreach / LinkedIn"),
+            ("how did you find", "Recruiter outreach / LinkedIn"),
+            ("how did you learn", "Recruiter outreach / LinkedIn"),
+            ("salary", PERSONAL_INFO.get("salary_expectation", "90000")),
+            ("compensation", PERSONAL_INFO.get("salary_expectation", "90000")),
+            ("location", f"{PERSONAL_INFO.get('city', '')}, {PERSONAL_INFO.get('state', '')}"),
+            ("address", PERSONAL_INFO.get("address", "")),
+            ("start date", "Immediately"),
+            ("when can you start", "Immediately"),
+            ("availability", "Immediately"),
+            ("earliest start", "Immediately"),
+            ("degree", "Master of Science in Computer Science"),
+            ("university", "University of Dayton"),
+            ("school", "University of Dayton"),
+            ("graduation", "2025"),
+            ("current", "University of Dayton"),
+            ("most recent", "University of Dayton"),
+            ("company", "University of Dayton"),
+        ]
 
-        # Years of experience
-        for kw in ["years of experience", "years experience", "experience level"]:
-            self._answer_text_question(page, kw, PERSONAL_INFO.get("years_experience", "3"))
+        for keyword, value in text_answers:
+            self._answer_text_question(page, keyword, value)
 
-        # LinkedIn / GitHub / Portfolio
-        self._answer_text_question(page, "linkedin", PERSONAL_INFO.get("linkedin_url", ""))
-        self._answer_text_question(page, "github", PERSONAL_INFO.get("github_url", ""))
-        self._answer_text_question(page, "portfolio", PERSONAL_INFO.get("portfolio_url", ""))
-        self._answer_text_question(page, "website", PERSONAL_INFO.get("portfolio_url", ""))
-
-        # How did you hear
-        for kw in ["how did you hear", "how did you find", "how did you learn", "source", "referral"]:
-            self._answer_text_question(page, kw, "Company career page")
-            self._answer_select_or_radio(page, kw, "Other")
-
-        # Salary
-        for kw in ["salary", "compensation", "pay expectation"]:
-            self._answer_text_question(page, kw, PERSONAL_INFO.get("salary_expectation", "90000"))
-
-        # Location / relocation
-        self._answer_text_question(page, "location", f"{PERSONAL_INFO.get('city', '')}, {PERSONAL_INFO.get('state', '')}")
-        self._answer_text_question(page, "address", PERSONAL_INFO.get("address", ""))
-        for kw in ["reloc", "willing to relocate", "open to relocation"]:
-            self._answer_select_or_radio(page, kw, "Yes")
-        self._answer_select_or_radio(page, "remote", "Yes")
-
-        # Start date
-        for kw in ["start date", "when can you start", "availability", "earliest start", "available to start"]:
-            self._answer_text_question(page, kw, "Immediately")
-
-        # Education
-        self._answer_text_question(page, "degree", "Master of Science in Computer Science")
-        self._answer_text_question(page, "university", "Wright State University")
-        self._answer_text_question(page, "school", "Wright State University")
-        self._answer_text_question(page, "graduation", "2025")
-
-        # Fill any remaining required selects with first non-empty option
+        # Fill any remaining required native <select> dropdowns
         self._fill_required_selects(page)
 
-        # Fill any remaining empty required text inputs with reasonable defaults
+        # Fill any remaining unfilled React Select dropdowns with first available option
+        self._fill_all_react_selects(page)
+
+        # Fill any remaining empty required text inputs
         self._fill_required_text_inputs(page)
 
+        # Check required checkboxes
+        self._check_required_checkboxes(page)
+
+    def _answer_react_select(self, page: Page, keyword: str, preferred_value: str):
+        """Handle Greenhouse React Select dropdowns: click input to open listbox, select option."""
+        try:
+            # Strategy: find all labels, match keyword, then find the React Select
+            # input by walking up the DOM from the label to find the field container
+            matched = page.evaluate("""(args) => {
+                const keyword = args[0].toLowerCase();
+                const results = [];
+                document.querySelectorAll('label').forEach(lbl => {
+                    const text = lbl.textContent.trim().toLowerCase();
+                    if (!text.includes(keyword)) return;
+                    // Walk up to find a container that has a React Select input
+                    let el = lbl.parentElement;
+                    for (let depth = 0; depth < 6 && el; depth++) {
+                        const inp = el.querySelector('input.select__input, input[class*="select__input"]');
+                        if (inp) {
+                            // Check if already has a value
+                            const sv = el.querySelector('[class*="select__single-value"]');
+                            const existing = sv ? sv.textContent.trim() : '';
+                            results.push({
+                                inputId: inp.id || '',
+                                hasValue: !!existing && existing.toLowerCase() !== 'select...' && existing !== '',
+                                existing: existing,
+                                depth: depth,
+                            });
+                            break;
+                        }
+                        el = el.parentElement;
+                    }
+                });
+                return results;
+            }""", [keyword])
+
+            if not matched:
+                return
+
+            for m in matched:
+                if m.get("hasValue"):
+                    continue  # Already answered
+
+                # Find the React Select input element
+                input_id = m.get("inputId", "")
+                if input_id:
+                    # Use [id='X'] syntax — #X fails for numeric IDs like 430
+                    react_input = page.locator(f"[id='{input_id}']")
+                else:
+                    # Fallback: find by walking DOM again via Playwright
+                    continue
+
+                if react_input.count() == 0:
+                    continue
+
+                try:
+                    if not react_input.is_visible(timeout=500):
+                        continue
+
+                    # Click to open dropdown
+                    react_input.click()
+                    page.wait_for_timeout(600)
+
+                    # Look for listbox options
+                    options = page.locator("div[role='option']")
+                    if options.count() == 0:
+                        page.wait_for_timeout(500)
+                        options = page.locator("div[role='option']")
+
+                    # Try to find preferred value (exact, partial, then first)
+                    best_match = None
+                    first_option = None
+                    for j in range(options.count()):
+                        opt = options.nth(j)
+                        opt_text = opt.text_content().strip()
+                        if first_option is None:
+                            first_option = opt
+                        if opt_text.lower() == preferred_value.lower():
+                            opt.click()
+                            page.wait_for_timeout(300)
+                            logger.info(f"  React select '{keyword}' -> '{opt_text}'")
+                            return
+                        if preferred_value.lower() in opt_text.lower():
+                            best_match = opt
+
+                    if best_match:
+                        best_text = best_match.text_content().strip()
+                        best_match.click()
+                        page.wait_for_timeout(300)
+                        logger.info(f"  React select '{keyword}' -> '{best_text}' (partial)")
+                        return
+                    if first_option:
+                        first_text = first_option.text_content().strip()
+                        first_option.click()
+                        page.wait_for_timeout(300)
+                        logger.info(f"  React select '{keyword}' -> '{first_text}' (fallback)")
+                        return
+
+                    # Close if nothing matched
+                    page.keyboard.press("Escape")
+                except Exception:
+                    try:
+                        page.keyboard.press("Escape")
+                    except Exception:
+                        pass
+                return
+        except Exception as e:
+            logger.debug(f"  React select error for '{keyword}': {e}")
+
+    def _fill_all_react_selects(self, page: Page):
+        """Fill any remaining empty React Select dropdowns with the first available option."""
+        try:
+            # Use JS to find all unfilled React Select containers
+            unfilled = page.evaluate("""() => {
+                const results = [];
+                document.querySelectorAll('input.select__input, input[class*="select__input"]').forEach(inp => {
+                    const rect = inp.getBoundingClientRect();
+                    if (rect.width === 0 || rect.height === 0) return;
+                    // Walk up to find container and check for existing value
+                    let el = inp.parentElement;
+                    let hasValue = false;
+                    for (let d = 0; d < 8 && el; d++) {
+                        const sv = el.querySelector('[class*="select__single-value"], [class*="singleValue"]');
+                        if (sv) {
+                            const val = sv.textContent.trim();
+                            if (val && val.toLowerCase() !== 'select...' && val !== '') {
+                                hasValue = true;
+                            }
+                            break;
+                        }
+                        el = el.parentElement;
+                    }
+                    if (!hasValue) results.push({ id: inp.id || '' });
+                });
+                return results;
+            }""")
+
+            for item in unfilled:
+                inp_id = item.get("id", "")
+                if not inp_id:
+                    continue
+                try:
+                    inp = page.locator(f"[id='{inp_id}']")
+                    if inp.count() == 0 or not inp.is_visible(timeout=300):
+                        continue
+                    inp.click()
+                    page.wait_for_timeout(500)
+                    options = page.locator("div[role='option']")
+                    if options.count() > 0:
+                        first_text = options.first.text_content().strip()
+                        options.first.click()
+                        page.wait_for_timeout(300)
+                        logger.info(f"  React select fallback #{inp_id} -> '{first_text}'")
+                    else:
+                        page.keyboard.press("Escape")
+                except Exception:
+                    try:
+                        page.keyboard.press("Escape")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
     def _fill_required_selects(self, page: Page):
-        """Fill any required select dropdowns that still have no value selected."""
+        """Fill any required native <select> dropdowns that still have no value selected."""
         try:
             selects = page.locator("select")
             for i in range(selects.count()):
@@ -568,11 +770,9 @@ class PlaywrightJobApplierAgent:
                 try:
                     if not sel.is_visible(timeout=300):
                         continue
-                    # Check if it's still on the default/empty option
                     current = sel.input_value()
                     if current and current.strip():
                         continue
-                    # Select the first non-empty option
                     options = sel.locator("option")
                     for j in range(options.count()):
                         val = options.nth(j).get_attribute("value") or ""
@@ -586,7 +786,7 @@ class PlaywrightJobApplierAgent:
             pass
 
     def _fill_required_text_inputs(self, page: Page):
-        """Fill any visible empty required text inputs with N/A or reasonable defaults."""
+        """Fill any visible empty required text inputs with N/A."""
         try:
             inputs = page.locator("input[required]:visible, input[aria-required='true']:visible")
             for i in range(inputs.count()):
@@ -594,12 +794,30 @@ class PlaywrightJobApplierAgent:
                 try:
                     if not inp.is_visible(timeout=300):
                         continue
+                    # Skip React Select inputs (they look like text inputs but aren't)
+                    cls = inp.get_attribute("class") or ""
+                    if "select__input" in cls:
+                        continue
                     current = inp.input_value()
                     if current and current.strip():
                         continue
                     inp_type = inp.get_attribute("type") or "text"
                     if inp_type in ["text", "url", "tel", "number"]:
                         inp.fill("N/A")
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    def _check_required_checkboxes(self, page: Page):
+        """Check any required but unchecked checkboxes (consent, GDPR, etc.)."""
+        try:
+            checkboxes = page.locator("input[type='checkbox'][required]:visible, input[type='checkbox'][aria-required='true']:visible")
+            for i in range(checkboxes.count()):
+                cb = checkboxes.nth(i)
+                try:
+                    if not cb.is_checked():
+                        cb.check()
                 except Exception:
                     continue
         except Exception:

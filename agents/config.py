@@ -97,7 +97,7 @@ PERSONAL_INFO = {
     "salary_expectation": os.getenv("SALARY_EXPECTATION", "90000"),
     "available_start": "Immediately",
     "education": "Master's",
-    "university": "Wright State University",
+    "university": "University of Dayton",
     "degree": "Master of Science in Computer Science",
     "graduation_year": "2025",
     "btech_year": "2022",
