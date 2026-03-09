@@ -170,8 +170,24 @@ class PlaywrightJobApplierAgent:
             logger.warning(f"  No URL for {job.get('title')}")
             return False
 
-        # Greenhouse apply pages typically append #app to the job URL
-        apply_url = url if "#app" in url else url + "#app"
+        # Build the direct boards.greenhouse.io URL which always has the standard form
+        ats_token = job.get("ats_token", "")
+        ats_job_id = job.get("ats_job_id", "")
+
+        if ats_token and ats_job_id:
+            apply_url = f"https://boards.greenhouse.io/{ats_token}/jobs/{ats_job_id}"
+        elif "boards.greenhouse.io" in url or "job-boards.greenhouse.io" in url:
+            apply_url = url
+        else:
+            # Try to extract gh_jid from URL query params
+            import re as _re
+            gh_match = _re.search(r'gh_jid=(\d+)', url)
+            if gh_match and ats_token:
+                apply_url = f"https://boards.greenhouse.io/{ats_token}/jobs/{gh_match.group(1)}"
+            else:
+                apply_url = url if "#app" in url else url + "#app"
+
+        logger.info(f"  Greenhouse URL: {apply_url}")
 
         page = self.browser.new_page()
         try:
