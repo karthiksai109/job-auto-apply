@@ -46,6 +46,10 @@ const AGENT_NAMES: Record<string, { label: string; desc: string; color: string }
   matcher: { label: "Matcher", desc: "Experience-aware scoring", color: "#c49231" },
   tracker: { label: "Tracker", desc: "Excel + DB sync", color: "#7c6bae" },
   notifier: { label: "Notifier", desc: "Email reports", color: "#8a7560" },
+  fit_analyst: { label: "Fit Analyst", desc: "Job match analysis", color: "#3d8b5e" },
+  interview_prep: { label: "Interview Prep", desc: "Interview coaching", color: "#6b5bae" },
+  profile_marketer: { label: "Profile Marketer", desc: "Profile optimization", color: "#c49231" },
+  scheduler: { label: "Scheduler", desc: "24/7 autonomous mode", color: "#c96442" },
 };
 
 export default function Dashboard() {
@@ -179,17 +183,18 @@ export default function Dashboard() {
         <div className="flex items-center justify-center gap-1.5 flex-wrap">
           {[
             { name: "Scrape", sub: "50+ companies" },
-            { name: "Score", sub: "Junior/Entry filter" },
-            { name: "Apply", sub: "Playwright" },
-            { name: "Track", sub: "Excel + DB" },
-            { name: "Notify", sub: "Email report" },
+            { name: "Score 90%+", sub: "SF / Remote" },
+            { name: "Apply", sub: "Playwright + OTP" },
+            { name: "Fit Analysis", sub: "Why you match" },
+            { name: "Interview Prep", sub: "Tech + behavioral" },
+            { name: "Track", sub: "Excel + notify" },
           ].map((step, i) => (
             <div key={step.name} className="flex items-center gap-1.5">
               <div className="px-4 py-2.5 rounded-lg text-center" style={{ background: "#f0ece6" }}>
                 <p className="text-[12px] font-semibold" style={{ color: "#1a1a1a" }}>{step.name}</p>
                 <p className="text-[9px]" style={{ color: "#9a9a9a" }}>{step.sub}</p>
               </div>
-              {i < 4 && <ArrowRight className="w-3.5 h-3.5" style={{ color: "#d4d0c8" }} />}
+              {i < 5 && <ArrowRight className="w-3.5 h-3.5" style={{ color: "#d4d0c8" }} />}
             </div>
           ))}
         </div>

@@ -7,6 +7,10 @@ import {
   Briefcase,
   Rocket,
   CheckCircle2,
+  Target,
+  GraduationCap,
+  UserCheck,
+  Timer,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -16,6 +20,10 @@ const NAV = [
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/apply", label: "Apply", icon: Rocket },
   { href: "/applied", label: "Applied", icon: CheckCircle2 },
+  { href: "/fit-reports", label: "Fit Reports", icon: Target },
+  { href: "/interview-prep", label: "Interview Prep", icon: GraduationCap },
+  { href: "/profile", label: "Profile", icon: UserCheck },
+  { href: "/scheduler", label: "Scheduler", icon: Timer },
 ];
 
 export default function Sidebar() {
