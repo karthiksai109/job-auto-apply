@@ -26,11 +26,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from agents.config import (
     RESUME_PATH, PERSONAL_INFO, JobStatus, DAILY_TARGET,
     JOB_DB_PATH, SMTP_SERVER, SMTP_PORT, EMAIL_SENDER,
-    EMAIL_PASSWORD, EMAIL_RECIPIENT,
+    EMAIL_PASSWORD, EMAIL_RECIPIENT, MIN_MATCH_SCORE,
+    SCRAPE_INTERVAL_HOURS, APPLY_INTERVAL_HOURS,
 )
 from agents.job_database import get_jobs_by_status, get_stats, update_job_status
 from agents.resume_parser import get_parsed_resume, get_all_skills_flat
 from agents.job_matcher import score_job
+from agents.agent_job_fit import analyze_job_fit, get_all_reports as get_fit_reports, get_report_for_job
+from agents.agent_interview_prep import generate_interview_prep, get_all_guides, get_guide_for_job
+from agents.agent_profile_marketer import analyze_profile, get_profile_report
 
 # ---------------------------------------------------------------------------
 # State
@@ -41,7 +45,14 @@ agent_states = {
     "matcher": {"status": "idle", "logs": [], "last_run": None, "stats": {}},
     "tracker": {"status": "idle", "logs": [], "last_run": None, "stats": {}},
     "notifier": {"status": "idle", "logs": [], "last_run": None, "stats": {}},
+    "fit_analyst": {"status": "idle", "logs": [], "last_run": None, "stats": {}},
+    "interview_prep": {"status": "idle", "logs": [], "last_run": None, "stats": {}},
+    "profile_marketer": {"status": "idle", "logs": [], "last_run": None, "stats": {}},
+    "scheduler": {"status": "idle", "logs": [], "last_run": None, "stats": {}},
 }
+
+_scheduler_running = False
+_scheduler_thread = None
 
 ws_clients: list[WebSocket] = []
 _apply_lock = threading.Lock()
@@ -80,7 +91,7 @@ def _get_filtered_jobs(status="scraped"):
         title_lower = j.get("title", "").lower()
         if any(kw in title_lower for kw in REJECT_TITLE_KEYWORDS):
             continue
-        if j.get("match_score", 0) < 60:
+        if j.get("match_score", 0) < MIN_MATCH_SCORE:
             continue
         filtered.append(j)
     # dedup
@@ -478,6 +489,233 @@ def api_applied_jobs():
             "match_reason": j.get("match_reason", ""),
         })
     return {"jobs": slim, "total": len(slim)}
+
+
+# ---------------------------------------------------------------------------
+# New Agent API Routes
+# ---------------------------------------------------------------------------
+
+@app.get("/api/fit-reports")
+def api_fit_reports():
+    """Get all job fit analysis reports."""
+    reports = get_fit_reports()
+    reports.sort(key=lambda r: r.get("analyzed_at", ""), reverse=True)
+    return {"reports": reports, "total": len(reports)}
+
+
+@app.get("/api/fit-report")
+def api_fit_report(url: str):
+    """Get fit report for a specific job."""
+    report = get_report_for_job(url)
+    if report:
+        return report
+    return {"error": "No report found for this job"}
+
+
+@app.post("/api/analyze-fit")
+def api_analyze_fit(background_tasks: BackgroundTasks):
+    """Run fit analysis on all applied jobs that don't have reports yet."""
+    def _run_fit_analysis():
+        agent_states["fit_analyst"]["status"] = "running"
+        _log("fit_analyst", "Running fit analysis on applied jobs...")
+        try:
+            db = _load_db()
+            applied = [j for j in db.get("jobs", []) if j.get("status") == "applied"]
+            existing = {r.get("url") for r in get_fit_reports()}
+            new_count = 0
+            for job in applied:
+                if job.get("url") not in existing:
+                    analyze_job_fit(job)
+                    new_count += 1
+            _log("fit_analyst", f"Analyzed {new_count} new jobs")
+            agent_states["fit_analyst"]["stats"] = {"analyzed": new_count}
+        except Exception as e:
+            _log("fit_analyst", f"Error: {e}", "error")
+        finally:
+            agent_states["fit_analyst"]["status"] = "idle"
+            agent_states["fit_analyst"]["last_run"] = datetime.now().isoformat()
+
+    background_tasks.add_task(_run_fit_analysis)
+    return {"status": "started"}
+
+
+@app.get("/api/interview-prep")
+def api_interview_guides():
+    """Get all interview prep guides."""
+    guides = get_all_guides()
+    guides.sort(key=lambda g: g.get("generated_at", ""), reverse=True)
+    return {"guides": guides, "total": len(guides)}
+
+
+@app.get("/api/interview-prep/job")
+def api_interview_guide(url: str):
+    """Get interview prep for a specific job."""
+    guide = get_guide_for_job(url)
+    if guide:
+        return guide
+    return {"error": "No guide found for this job"}
+
+
+@app.post("/api/generate-prep")
+def api_generate_prep(background_tasks: BackgroundTasks):
+    """Generate interview prep for all applied jobs without guides."""
+    def _run_prep():
+        agent_states["interview_prep"]["status"] = "running"
+        _log("interview_prep", "Generating interview prep guides...")
+        try:
+            db = _load_db()
+            applied = [j for j in db.get("jobs", []) if j.get("status") == "applied"]
+            existing = {g.get("url") for g in get_all_guides()}
+            new_count = 0
+            for job in applied:
+                if job.get("url") not in existing:
+                    generate_interview_prep(job)
+                    new_count += 1
+            _log("interview_prep", f"Generated {new_count} new prep guides")
+            agent_states["interview_prep"]["stats"] = {"generated": new_count}
+        except Exception as e:
+            _log("interview_prep", f"Error: {e}", "error")
+        finally:
+            agent_states["interview_prep"]["status"] = "idle"
+            agent_states["interview_prep"]["last_run"] = datetime.now().isoformat()
+
+    background_tasks.add_task(_run_prep)
+    return {"status": "started"}
+
+
+@app.get("/api/profile")
+def api_profile():
+    """Get profile marketing analysis."""
+    return get_profile_report()
+
+
+@app.post("/api/analyze-profile")
+def api_analyze_profile_route(background_tasks: BackgroundTasks):
+    """Run profile marketing analysis."""
+    def _run():
+        agent_states["profile_marketer"]["status"] = "running"
+        _log("profile_marketer", "Analyzing profile...")
+        try:
+            result = analyze_profile()
+            agent_states["profile_marketer"]["stats"] = {
+                "strength": result.get("profile_strength", 0),
+                "recruiter_score": result.get("recruiter_attraction_score", 0),
+            }
+            _log("profile_marketer", f"Profile strength: {result.get('profile_strength')}%")
+        except Exception as e:
+            _log("profile_marketer", f"Error: {e}", "error")
+        finally:
+            agent_states["profile_marketer"]["status"] = "idle"
+            agent_states["profile_marketer"]["last_run"] = datetime.now().isoformat()
+
+    background_tasks.add_task(_run)
+    return {"status": "started"}
+
+
+# ---------------------------------------------------------------------------
+# 24/7 Scheduler
+# ---------------------------------------------------------------------------
+
+def _scheduler_loop():
+    """Continuous scheduler: scrape + apply on intervals, 24/7."""
+    global _scheduler_running
+    _log("scheduler", f"🚀 24/7 Scheduler started — scrape every {SCRAPE_INTERVAL_HOURS}h, apply every {APPLY_INTERVAL_HOURS}h")
+    agent_states["scheduler"]["status"] = "running"
+
+    last_scrape = 0
+    last_apply = 0
+    cycle = 0
+
+    while _scheduler_running:
+        now = time.time()
+        cycle += 1
+
+        # Scrape new jobs
+        if now - last_scrape >= SCRAPE_INTERVAL_HOURS * 3600:
+            _log("scheduler", f"[Cycle {cycle}] Scraping new jobs...")
+            try:
+                _run_scraper()
+                last_scrape = time.time()
+            except Exception as e:
+                _log("scheduler", f"Scraper error: {e}", "error")
+
+        # Apply to eligible jobs
+        if now - last_apply >= APPLY_INTERVAL_HOURS * 3600:
+            eligible = _get_filtered_jobs("scraped")
+            if eligible:
+                _log("scheduler", f"[Cycle {cycle}] Applying to {len(eligible)} eligible jobs...")
+                try:
+                    _run_apply_batch(min(50, len(eligible)))
+                    last_apply = time.time()
+
+                    # Auto-generate fit reports and interview prep for newly applied jobs
+                    db = _load_db()
+                    applied = [j for j in db.get("jobs", []) if j.get("status") == "applied"]
+                    existing_fit = {r.get("url") for r in get_fit_reports()}
+                    existing_prep = {g.get("url") for g in get_all_guides()}
+                    for job in applied:
+                        url = job.get("url")
+                        if url and url not in existing_fit:
+                            try:
+                                analyze_job_fit(job)
+                            except:
+                                pass
+                        if url and url not in existing_prep:
+                            try:
+                                generate_interview_prep(job)
+                            except:
+                                pass
+                except Exception as e:
+                    _log("scheduler", f"Apply error: {e}", "error")
+            else:
+                _log("scheduler", f"[Cycle {cycle}] No eligible jobs to apply to")
+
+        agent_states["scheduler"]["stats"] = {
+            "cycle": cycle,
+            "last_scrape": datetime.fromtimestamp(last_scrape).isoformat() if last_scrape else "never",
+            "last_apply": datetime.fromtimestamp(last_apply).isoformat() if last_apply else "never",
+        }
+
+        # Sleep 5 minutes between checks
+        for _ in range(60):
+            if not _scheduler_running:
+                break
+            time.sleep(5)
+
+    agent_states["scheduler"]["status"] = "idle"
+    _log("scheduler", "Scheduler stopped")
+
+
+@app.post("/api/scheduler/start")
+def api_start_scheduler(background_tasks: BackgroundTasks):
+    """Start the 24/7 scheduler."""
+    global _scheduler_running, _scheduler_thread
+    if _scheduler_running:
+        return {"status": "already_running"}
+    _scheduler_running = True
+    _scheduler_thread = threading.Thread(target=_scheduler_loop, daemon=True)
+    _scheduler_thread.start()
+    return {"status": "started"}
+
+
+@app.post("/api/scheduler/stop")
+def api_stop_scheduler():
+    """Stop the 24/7 scheduler."""
+    global _scheduler_running
+    _scheduler_running = False
+    _log("scheduler", "Stop requested...")
+    return {"status": "stopping"}
+
+
+@app.get("/api/scheduler/status")
+def api_scheduler_status():
+    """Get scheduler status."""
+    return {
+        "running": _scheduler_running,
+        "status": agent_states["scheduler"]["status"],
+        "stats": agent_states["scheduler"]["stats"],
+        "logs": agent_states["scheduler"]["logs"][-20:],
+    }
 
 
 if __name__ == "__main__":

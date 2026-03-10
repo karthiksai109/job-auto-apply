@@ -60,8 +60,11 @@ SEARCH_QUERIES = [
 ]
 
 LOCATIONS = [
-    "United States",
+    "San Francisco",
+    "San Jose",
+    "Bay Area",
     "Remote",
+    "United States",
 ]
 
 EXPERIENCE_LEVEL = ["Entry level", "Associate", "Mid-Senior level"]
@@ -69,10 +72,10 @@ JOB_TYPE = ["Full-time", "Contract"]
 REMOTE_FILTER = ["Remote", "Hybrid"]
 
 # Daily targets
-DAILY_TARGET = 100
+DAILY_TARGET = 50
 
 # Minimum match score (0-100) to auto-apply
-MIN_MATCH_SCORE = 60
+MIN_MATCH_SCORE = 90
 
 # ============================================================
 # PERSONAL INFO (for form auto-fill)

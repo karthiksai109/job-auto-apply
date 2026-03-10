@@ -313,8 +313,48 @@ class PlaywrightJobApplierAgent:
             # STEP 6: Check for email verification code prompt
             body_text = page.locator("body").text_content()[:2000].lower()
             if "verification code" in body_text or "security code" in body_text:
-                logger.info(f"  ⏳ Verification code required for {job.get('title')} — waiting for manual entry...")
-                # Wait up to 120 seconds for user to enter the code and click submit
+                logger.info(f"  ⏳ Verification code required for {job.get('title')} — trying Gmail IMAP...")
+
+                # Try auto-reading OTP from Gmail
+                otp_entered = False
+                try:
+                    from agents.gmail_otp_reader import fetch_greenhouse_otp
+                    otp = fetch_greenhouse_otp(max_wait_seconds=60, poll_interval=5)
+                    if otp:
+                        logger.info(f"  📧 OTP found: {otp} — entering...")
+                        # Find the security code input boxes and fill them
+                        code_inputs = page.locator("input[name*='security'], input[aria-label*='character'], input[type='text'][maxlength='1']")
+                        if code_inputs.count() >= len(otp):
+                            for i, ch in enumerate(otp):
+                                code_inputs.nth(i).fill(ch)
+                            page.wait_for_timeout(500)
+                            otp_entered = True
+                        else:
+                            # Try a single input field
+                            single = page.locator("input[name*='code'], input[placeholder*='code'], input[aria-label*='code']").first
+                            if single.count() > 0:
+                                single.fill(otp)
+                                otp_entered = True
+
+                        if otp_entered:
+                            # Click submit after entering code
+                            for sel in ["button[type='submit']", "button:has-text('Submit')", "button:has-text('Submit application')"]:
+                                try:
+                                    btn = page.locator(sel).first
+                                    if btn.count() > 0 and btn.is_visible(timeout=2000):
+                                        btn.click()
+                                        logger.info(f"  📤 Clicked submit after OTP entry")
+                                        break
+                                except:
+                                    continue
+                            page.wait_for_timeout(5000)
+                except Exception as e:
+                    logger.warning(f"  Gmail OTP reader failed: {e}")
+
+                if not otp_entered:
+                    logger.info(f"  ⏳ Waiting for manual OTP entry (120s)...")
+
+                # Wait for success (either auto or manual)
                 try:
                     page.wait_for_function(
                         """() => {
@@ -329,7 +369,6 @@ class PlaywrightJobApplierAgent:
                     if self._check_success(page):
                         logger.info(f"  ✅ SUCCESS confirmed for {job.get('title')}")
                         return True
-                    # Check if verification code section disappeared
                     new_body = page.locator("body").text_content()[:1000].lower()
                     if "security code" not in new_body and "verification code" not in new_body:
                         logger.info(f"  ✅ Verification completed for {job.get('title')}")

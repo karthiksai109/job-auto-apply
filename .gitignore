@@ -13,9 +13,13 @@ venv/
 # Data files (contain personal info)
 jobs_database.json
 job_applications.xlsx
+fit_reports.json
+interview_prep.json
+profile_marketing.json
 logs/
 chrome_profile/
 MY_DETAILS_FOR_APPROVAL.md
+create_cover_letter.py
 *.docx
 debug_*.png
 
