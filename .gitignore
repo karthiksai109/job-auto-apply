@@ -15,6 +15,9 @@ jobs_database.json
 job_applications.xlsx
 logs/
 chrome_profile/
+MY_DETAILS_FOR_APPROVAL.md
+*.docx
+debug_*.png
 
 # Node
 node_modules/
